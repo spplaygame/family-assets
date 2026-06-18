@@ -1,5 +1,5 @@
 // ── 設定 ────────────────────────────────────────────────────────
-const API = '/api/quote'; // Vercel serverless proxy
+const API = '/api/quote';
 
 const CATS = {
   tw_stock: { label: '台股', cur: 'TWD', color: '#378ADD', badge: 'btw' },
@@ -19,64 +19,61 @@ const TYPE_GROUPS = {
 };
 
 const SECURITIES = [
-  { sym: 'VT',    name: 'Vanguard Total World Stock ETF', type: 'us_stock' },
-  { sym: 'VTI',   name: 'Vanguard Total Stock Market ETF', type: 'us_stock' },
-  { sym: 'VXUS',  name: 'Vanguard Total International Stock ETF', type: 'us_stock' },
-  { sym: 'VOO',   name: 'Vanguard S&P 500 ETF', type: 'us_stock' },
-  { sym: 'VEA',   name: 'Vanguard FTSE Developed Markets ETF', type: 'us_stock' },
-  { sym: 'VWO',   name: 'Vanguard FTSE Emerging Markets ETF', type: 'us_stock' },
-  { sym: 'BND',   name: 'Vanguard Total Bond Market ETF', type: 'us_stock' },
-  { sym: 'BNDX',  name: 'Vanguard Total International Bond ETF', type: 'us_stock' },
-  { sym: 'QQQ',   name: 'Invesco QQQ Trust (Nasdaq 100)', type: 'us_stock' },
-  { sym: 'SPY',   name: 'SPDR S&P 500 ETF Trust', type: 'us_stock' },
-  { sym: 'IVV',   name: 'iShares Core S&P 500 ETF', type: 'us_stock' },
-  { sym: 'AGG',   name: 'iShares Core US Aggregate Bond ETF', type: 'us_stock' },
-  { sym: 'GLD',   name: 'SPDR Gold Shares', type: 'us_stock' },
-  { sym: 'SCHD',  name: 'Schwab US Dividend Equity ETF', type: 'us_stock' },
-  { sym: 'ARKK',  name: 'ARK Innovation ETF', type: 'us_stock' },
-  { sym: 'AAPL',  name: 'Apple Inc.', type: 'us_stock' },
-  { sym: 'MSFT',  name: 'Microsoft Corporation', type: 'us_stock' },
-  { sym: 'NVDA',  name: 'NVIDIA Corporation', type: 'us_stock' },
-  { sym: 'GOOGL', name: 'Alphabet Inc.', type: 'us_stock' },
-  { sym: 'AMZN',  name: 'Amazon.com Inc.', type: 'us_stock' },
-  { sym: 'META',  name: 'Meta Platforms Inc.', type: 'us_stock' },
-  { sym: 'TSLA',  name: 'Tesla Inc.', type: 'us_stock' },
-  { sym: 'NFLX',  name: 'Netflix Inc.', type: 'us_stock' },
-  { sym: 'BRKB',  name: 'Berkshire Hathaway Inc. Class B', type: 'us_stock' },
-  { sym: 'VWRA',  name: 'Vanguard FTSE All-World UCITS ETF', type: 'uk_stock' },
-  { sym: 'VUSA',  name: 'Vanguard S&P 500 UCITS ETF', type: 'uk_stock' },
-  { sym: 'VFEM',  name: 'Vanguard FTSE Emerging Markets UCITS ETF', type: 'uk_stock' },
-  { sym: 'VHYL',  name: 'Vanguard FTSE All-World High Dividend Yield UCITS ETF', type: 'uk_stock' },
-  { sym: 'HSBC',  name: 'HSBC Holdings plc', type: 'uk_stock' },
-  { sym: 'BP',    name: 'BP plc', type: 'uk_stock' },
-  { sym: 'SHEL',  name: 'Shell plc', type: 'uk_stock' },
-  { sym: '2330',  name: '台積電', type: 'tw_stock' },
-  { sym: '2317',  name: '鴻海精密', type: 'tw_stock' },
-  { sym: '2454',  name: '聯發科技', type: 'tw_stock' },
-  { sym: '2882',  name: '國泰金控', type: 'tw_stock' },
-  { sym: '2881',  name: '富邦金控', type: 'tw_stock' },
-  { sym: '2412',  name: '中華電信', type: 'tw_stock' },
-  { sym: '0050',  name: '元大台灣50', type: 'tw_stock' },
-  { sym: '0056',  name: '元大高股息', type: 'tw_stock' },
-  { sym: '006208',name: '富邦台灣50', type: 'tw_stock' },
-  { sym: '00878', name: '國泰永續高股息', type: 'tw_stock' },
-  { sym: 'BTC',   name: 'Bitcoin', type: 'crypto' },
-  { sym: 'ETH',   name: 'Ethereum', type: 'crypto' },
-  { sym: 'SOL',   name: 'Solana', type: 'crypto' },
-  { sym: 'BNB',   name: 'BNB', type: 'crypto' },
-  { sym: 'XRP',   name: 'XRP', type: 'crypto' },
-  { sym: 'ADA',   name: 'Cardano', type: 'crypto' },
-  { sym: 'DOGE',  name: 'Dogecoin', type: 'crypto' },
-  { sym: 'AVAX',  name: 'Avalanche', type: 'crypto' },
+  { sym: 'VT',     name: 'Vanguard Total World Stock ETF', type: 'us_stock' },
+  { sym: 'VTI',    name: 'Vanguard Total Stock Market ETF', type: 'us_stock' },
+  { sym: 'VXUS',   name: 'Vanguard Total International Stock ETF', type: 'us_stock' },
+  { sym: 'VOO',    name: 'Vanguard S&P 500 ETF', type: 'us_stock' },
+  { sym: 'VEA',    name: 'Vanguard FTSE Developed Markets ETF', type: 'us_stock' },
+  { sym: 'VWO',    name: 'Vanguard FTSE Emerging Markets ETF', type: 'us_stock' },
+  { sym: 'BND',    name: 'Vanguard Total Bond Market ETF', type: 'us_stock' },
+  { sym: 'QQQ',    name: 'Invesco QQQ Trust (Nasdaq 100)', type: 'us_stock' },
+  { sym: 'SPY',    name: 'SPDR S&P 500 ETF Trust', type: 'us_stock' },
+  { sym: 'IVV',    name: 'iShares Core S&P 500 ETF', type: 'us_stock' },
+  { sym: 'GLD',    name: 'SPDR Gold Shares', type: 'us_stock' },
+  { sym: 'SCHD',   name: 'Schwab US Dividend Equity ETF', type: 'us_stock' },
+  { sym: 'AAPL',   name: 'Apple Inc.', type: 'us_stock' },
+  { sym: 'MSFT',   name: 'Microsoft Corporation', type: 'us_stock' },
+  { sym: 'NVDA',   name: 'NVIDIA Corporation', type: 'us_stock' },
+  { sym: 'GOOGL',  name: 'Alphabet Inc.', type: 'us_stock' },
+  { sym: 'AMZN',   name: 'Amazon.com Inc.', type: 'us_stock' },
+  { sym: 'META',   name: 'Meta Platforms Inc.', type: 'us_stock' },
+  { sym: 'TSLA',   name: 'Tesla Inc.', type: 'us_stock' },
+  { sym: 'BRKB',   name: 'Berkshire Hathaway Class B', type: 'us_stock' },
+  { sym: 'VWRA',   name: 'Vanguard FTSE All-World UCITS ETF', type: 'uk_stock' },
+  { sym: 'VUSA',   name: 'Vanguard S&P 500 UCITS ETF', type: 'uk_stock' },
+  { sym: 'VHYL',   name: 'Vanguard FTSE All-World High Dividend Yield UCITS ETF', type: 'uk_stock' },
+  { sym: 'HSBC',   name: 'HSBC Holdings plc', type: 'uk_stock' },
+  { sym: 'BP',     name: 'BP plc', type: 'uk_stock' },
+  { sym: '2330',   name: '台積電', type: 'tw_stock' },
+  { sym: '2317',   name: '鴻海精密', type: 'tw_stock' },
+  { sym: '2454',   name: '聯發科技', type: 'tw_stock' },
+  { sym: '2882',   name: '國泰金控', type: 'tw_stock' },
+  { sym: '2881',   name: '富邦金控', type: 'tw_stock' },
+  { sym: '0050',   name: '元大台灣50', type: 'tw_stock' },
+  { sym: '0056',   name: '元大高股息', type: 'tw_stock' },
+  { sym: '006208', name: '富邦台灣50', type: 'tw_stock' },
+  { sym: '00878',  name: '國泰永續高股息', type: 'tw_stock' },
+  { sym: 'BTC',    name: 'Bitcoin', type: 'crypto' },
+  { sym: 'ETH',    name: 'Ethereum', type: 'crypto' },
+  { sym: 'SOL',    name: 'Solana', type: 'crypto' },
+  { sym: 'BNB',    name: 'BNB', type: 'crypto' },
+  { sym: 'XRP',    name: 'XRP', type: 'crypto' },
+  { sym: 'DOGE',   name: 'Dogecoin', type: 'crypto' },
 ];
 
 const CRYPTO_IDS = {
   BTC:'bitcoin', ETH:'ethereum', SOL:'solana', BNB:'binancecoin',
   XRP:'ripple', ADA:'cardano', DOGE:'dogecoin', AVAX:'avalanche-2',
-  DOT:'polkadot', LINK:'chainlink', UNI:'uniswap', MATIC:'matic-network',
 };
 
-// ── State ────────────────────────────────────────────────────────
+// Yahoo Finance 代碼格式轉換
+function toYahooSymbol(ticker, type) {
+  if (type === 'tw_stock' || type === 'tw_fund') return ticker + '.TW';
+  if (type === 'uk_stock') return ticker + '.L';
+  return ticker; // 美股直接用
+}
+
+// ── State ─────────────────────────────────────────────────────────
 let profile = 'me', chartPeriod = '1M', dim = 'detail', selType = null;
 let trendChart = null, donutChart = null, fetching = false;
 let names = { me: '我', wife: '太太' };
@@ -84,7 +81,7 @@ let assets = [];
 let fx = { usd: { rate: 32.0, prev: 32.0 }, gbp: { rate: 40.5, prev: 40.5 } };
 let editIndex = -1, acTimer = null;
 
-// ── Helpers ──────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────
 const todayStr = () => new Date().toISOString().split('T')[0];
 const PCT = v => (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
 const CLS = v => v >= 0 ? 'pos' : 'neg';
@@ -97,7 +94,7 @@ const fmtCur = (v, c) => {
 };
 const toTWD = (v, c) => c === 'USD' ? v * fx.usd.rate : c === 'GBP' ? v * fx.gbp.rate : v;
 
-// ── Storage ──────────────────────────────────────────────────────
+// ── Storage ───────────────────────────────────────────────────────
 function saveData() {
   localStorage.setItem('family_assets', JSON.stringify(assets));
   localStorage.setItem('family_names', JSON.stringify(names));
@@ -115,9 +112,9 @@ function loadData() {
   } catch(e) { console.warn(e); }
 }
 
-// ── API via proxy ────────────────────────────────────────────────
-async function proxyQuote(symbol) {
-  const r = await fetch(API + '?type=quote&symbol=' + encodeURIComponent(symbol));
+// ── API via proxy ─────────────────────────────────────────────────
+async function proxyQuote(yahooSymbol) {
+  const r = await fetch(API + '?type=quote&symbol=' + encodeURIComponent(yahooSymbol));
   const d = await r.json();
   if (d.error) throw new Error(d.error);
   return d;
@@ -126,7 +123,7 @@ async function proxyQuote(symbol) {
 async function proxySearch(q) {
   const r = await fetch(API + '?type=search&symbol=' + encodeURIComponent(q));
   const d = await r.json();
-  return (d.result || []).filter(x => ['Common Stock','ETP','ETF'].includes(x.type)).slice(0, 8);
+  return d.result || [];
 }
 
 async function proxyCrypto(ids) {
@@ -139,16 +136,6 @@ async function proxyFX(from, to, date) {
   if (date) url += '&date=' + date;
   const r = await fetch(url);
   return await r.json();
-}
-
-async function twStockQuote(ticker) {
-  for (const suf of [':TSE', ':TWSE', '.TW']) {
-    try {
-      const d = await proxyQuote(ticker + suf);
-      return d;
-    } catch {}
-  }
-  throw new Error('TW fail');
 }
 
 async function fetchFX() {
@@ -167,7 +154,7 @@ async function fetchFX() {
   }
 }
 
-// ── Fetch all prices ─────────────────────────────────────────────
+// ── Fetch all prices ──────────────────────────────────────────────
 async function fetchAll() {
   if (fetching) return;
   fetching = true;
@@ -177,19 +164,20 @@ async function fetchAll() {
 
   try { await fetchFX(); updateFxBar(); } catch(e) { console.warn('FX fail', e); }
 
-  for (const a of assets.filter(x => ['tw_stock','tw_fund'].includes(x.type))) {
-    try { const q = await twStockQuote(a.ticker); a.prevPrice = q.prevClose; a.price = q.price; a.priceSource = 'live'; }
-    catch { a.priceSource = 'error'; }
+  // 股票類（台股、美股、英股、基金）
+  const stockTypes = ['tw_stock', 'tw_fund', 'us_stock', 'uk_stock'];
+  for (const a of assets.filter(x => stockTypes.includes(x.type))) {
+    try {
+      const yahooSym = toYahooSymbol(a.ticker, a.type);
+      const q = await proxyQuote(yahooSym);
+      a.prevPrice = q.prevClose;
+      a.price = q.price;
+      if (q.name && !a.name) a.name = q.name;
+      a.priceSource = 'live';
+    } catch { a.priceSource = 'error'; }
   }
-  for (const a of assets.filter(x => x.type === 'uk_stock')) {
-    try { const q = await proxyQuote(a.ticker + ':LSE'); a.prevPrice = q.prevClose; a.price = q.price; a.priceSource = 'live'; }
-    catch { a.priceSource = 'error'; }
-  }
-  for (const a of assets.filter(x => x.type === 'us_stock')) {
-    try { const q = await proxyQuote(a.ticker); a.prevPrice = q.prevClose; a.price = q.price; a.priceSource = 'live'; }
-    catch { a.priceSource = 'error'; }
-  }
-  // Crypto - batch call
+
+  // 加密貨幣（批次查詢）
   const cryptoAssets = assets.filter(x => x.type === 'crypto');
   if (cryptoAssets.length) {
     try {
@@ -209,7 +197,7 @@ async function fetchAll() {
 
   saveData();
   const now = new Date();
-  document.getElementById('last-upd').textContent = '更新於 ' + now.getHours() + ':' + String(now.getMinutes()).padStart(2,'0');
+  document.getElementById('last-upd').textContent = '更新於 ' + now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0');
   fetching = false;
   btn.disabled = false;
   btn.innerHTML = '<i class="ti ti-refresh"></i> 更新報價';
@@ -227,13 +215,15 @@ function updateFxBar() {
   document.getElementById('rc-gbp').className = CLS(gChg);
 }
 
-// ── Autocomplete ─────────────────────────────────────────────────
+// ── Autocomplete ──────────────────────────────────────────────────
 function onTickerInput() {
   clearTimeout(acTimer);
   const q = document.getElementById('f-ticker').value.trim();
   if (!q) { hideAC(); return; }
   const kw = q.toLowerCase();
-  const local = SECURITIES.filter(s => s.sym.toLowerCase().includes(kw) || s.name.toLowerCase().includes(kw)).slice(0, 6);
+  const local = SECURITIES.filter(s =>
+    s.sym.toLowerCase().includes(kw) || s.name.toLowerCase().includes(kw)
+  ).slice(0, 6);
   showAC(local);
   acTimer = setTimeout(async () => {
     try {
@@ -243,12 +233,12 @@ function onTickerInput() {
       remoteItems.forEach(r => { if (!merged.find(m => m.sym === r.sym)) merged.push(r); });
       showAC(merged.slice(0, 8));
     } catch {}
-  }, 500);
+  }, 600);
 }
 
 function guessType(sym) {
-  if (sym.endsWith('.TW') || sym.endsWith(':TSE')) return 'tw_stock';
-  if (sym.endsWith('.L') || sym.endsWith(':LSE')) return 'uk_stock';
+  if (sym.endsWith('.TW')) return 'tw_stock';
+  if (sym.endsWith('.L')) return 'uk_stock';
   return 'us_stock';
 }
 
@@ -256,7 +246,7 @@ function showAC(items) {
   const dd = document.getElementById('ac-dropdown');
   if (!items.length) { dd.style.display = 'none'; return; }
   dd.innerHTML = items.map(s =>
-    '<div class="ac-item" onclick="selectTicker(\'' + s.sym + '\',\'' + s.name.replace(/'/g,"\\'") + '\',\'' + s.type + '\')">' +
+    '<div class="ac-item" onclick="selectTicker(\'' + s.sym + '\',\'' + s.name.replace(/'/g, "\\'") + '\',\'' + s.type + '\')">' +
     '<span class="ac-sym">' + s.sym + '</span><span class="ac-name">' + s.name + '</span></div>'
   ).join('');
   dd.style.display = 'block';
@@ -270,12 +260,11 @@ async function selectTicker(sym, name, type) {
   const priceEl = document.getElementById('f-price');
   statusEl.textContent = '查詢即時報價…'; statusEl.className = 'price-status price-loading';
   try {
-    let q;
-    if (selType === 'tw_stock' || selType === 'tw_fund') q = await twStockQuote(sym);
-    else if (selType === 'uk_stock') q = await proxyQuote(sym + ':LSE');
-    else q = await proxyQuote(sym);
+    const yahooSym = toYahooSymbol(sym, selType || type);
+    const q = await proxyQuote(yahooSym);
     priceEl.value = q.price;
     priceEl.dataset.prevClose = q.prevClose;
+    if (q.name) document.getElementById('f-name').value = q.name;
     statusEl.textContent = '✓ 即時報價'; statusEl.className = 'price-status price-ok';
   } catch {
     statusEl.textContent = '查詢失敗，請手動輸入'; statusEl.className = 'price-status price-err';
@@ -309,14 +298,15 @@ async function selectCrypto(sym, name) {
     const entry = d[id];
     if (!entry) throw new Error('no data');
     priceEl.value = entry.usd.toFixed(2);
-    priceEl.dataset.prevClose = (entry.usd / (1 + (entry.usd_24h_change || 0) / 100)).toFixed(2);
+    const chg = entry.usd_24h_change || 0;
+    priceEl.dataset.prevClose = (entry.usd / (1 + chg / 100)).toFixed(2);
     statusEl.textContent = '✓ 即時報價'; statusEl.className = 'price-status price-ok';
   } catch {
     statusEl.textContent = '查詢失敗，請手動輸入'; statusEl.className = 'price-status price-err';
   }
 }
 
-// ── Asset Calcs ──────────────────────────────────────────────────
+// ── Asset Calcs ───────────────────────────────────────────────────
 function assetValTWD(a) {
   if (a.type === 'twd_cash') return a.amt;
   if (a.type === 'usd_cash') return a.amt * fx.usd.rate;
@@ -351,7 +341,7 @@ function assetCostTWD(a) {
 function assetUnrealTWD(a) { return assetValTWD(a) - assetCostTWD(a); }
 function getAllFiltered() { return profile === 'family' ? assets : assets.filter(a => a.owner === profile); }
 
-// ── Render ───────────────────────────────────────────────────────
+// ── Render ────────────────────────────────────────────────────────
 function renderAll() {
   const all = getAllFiltered();
   const totalTWD = all.reduce((s,a) => s + assetValTWD(a), 0);
@@ -478,7 +468,7 @@ function renderSections(all) {
   }).join('');
 }
 
-// ── Modal ────────────────────────────────────────────────────────
+// ── Modal ─────────────────────────────────────────────────────────
 function openAddModal() {
   editIndex=-1; selType=null;
   document.getElementById('modal-title-text').textContent='新增資產';
@@ -655,6 +645,6 @@ function applyRename() {
   saveData(); renderAll();
 }
 
-// ── Init ─────────────────────────────────────────────────────────
+// ── Init ──────────────────────────────────────────────────────────
 loadData();
 fetchFX().then(()=>{updateFxBar();renderAll();}).catch(()=>{renderAll();});
