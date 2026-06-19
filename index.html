@@ -9,36 +9,27 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
-<div class="page" id="app">
 
+<div class="page active" id="page-home">
   <div class="profile-bar">
     <button class="profile-btn active" onclick="setProfile('me')" id="pb-me">
-      <span class="avatar" style="background:#E6F1FB;color:#185FA5">我</span>
+      <span class="avatar" style="background:#dbeafe;color:#1d4ed8">我</span>
       <span id="lbl-me">我的資產</span>
     </button>
     <button class="profile-btn" onclick="setProfile('wife')" id="pb-wife">
-      <span class="avatar" style="background:#FBEAF0;color:#993556">妻</span>
+      <span class="avatar" style="background:#fce7f3;color:#9d174d">妻</span>
       <span id="lbl-wife">太太的資產</span>
     </button>
     <button class="profile-btn" onclick="setProfile('family')" id="pb-family">
-      <span class="avatar" style="background:#EAF3DE;color:#3B6D11"><i class="ti ti-home"></i></span>
+      <span class="avatar" style="background:#dcfce7;color:#166534"><i class="ti ti-home" style="font-size:12px"></i></span>
       家庭總資產
     </button>
-    <button class="icon-btn" onclick="toggleRename()"><i class="ti ti-pencil"></i> 編輯名稱</button>
-  </div>
-
-  <div id="rename-bar" style="display:none;margin-bottom:1rem">
-    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-      <div><label>名稱 1</label><input id="rn-me" type="text" style="width:100px" value="我"></div>
-      <div><label>名稱 2</label><input id="rn-wife" type="text" style="width:100px" value="太太"></div>
-      <button class="btn-primary" onclick="applyRename()">套用</button>
-    </div>
   </div>
 
   <div class="rate-bar">
-    <span class="rate-title"><i class="ti ti-currency-exchange"></i> 匯率</span>
-    <span>USD/TWD <span class="rate-val" id="r-usd">載入中…</span> <span id="rc-usd"></span></span>
-    <span>GBP/TWD <span class="rate-val" id="r-gbp">載入中…</span> <span id="rc-gbp"></span></span>
+    <span style="font-weight:600"><i class="ti ti-currency-exchange" style="font-size:13px;vertical-align:-2px"></i> 匯率</span>
+    <span>USD/TWD <span class="rate-val" id="r-usd">—</span> <span id="rc-usd"></span></span>
+    <span>GBP/TWD <span class="rate-val" id="r-gbp">—</span> <span id="rc-gbp"></span></span>
     <span class="last-upd" id="last-upd" style="margin-left:auto"></span>
     <button class="refresh-btn" id="refresh-btn" onclick="fetchAll()"><i class="ti ti-refresh"></i> 更新報價</button>
   </div>
@@ -59,8 +50,8 @@
   <div class="sgrid">
     <div class="metric"><div class="mlabel">未實現損益</div><div class="mval" id="m-unreal">—</div><div class="msub" id="m-unreal-pct">—</div></div>
     <div class="metric"><div class="mlabel">今日投資損益</div><div class="mval" id="m-today">—</div><div class="msub" id="m-today-pct">—</div></div>
-    <div class="metric"><div class="mlabel">今日匯率損益</div><div class="mval" id="m-fx">—</div><div class="msub" style="font-size:10px;color:#888">USD+GBP 換算</div></div>
-    <div class="metric"><div class="mlabel">持倉筆數</div><div class="mval" id="m-count">0</div><div class="msub" style="color:#888">筆資產</div></div>
+    <div class="metric"><div class="mlabel">今日匯率損益</div><div class="mval" id="m-fx">—</div><div class="msub" style="font-size:10px">USD+GBP 換算</div></div>
+    <div class="metric"><div class="mlabel">持倉筆數</div><div class="mval" id="m-count">0</div><div class="msub">筆資產</div></div>
   </div>
 
   <div class="donut-card">
@@ -82,109 +73,165 @@
     </div>
   </div>
 
-  <div style="font-size:11px;color:#aaa;text-align:right;margin-bottom:4px">點選下方標的可編輯</div>
   <div class="fab">
     <button class="btn-primary" onclick="openAddModal()"><i class="ti ti-plus"></i> 新增資產</button>
   </div>
   <div id="asset-sections"></div>
+</div>
 
-  <div id="modal-overlay" class="modal-overlay" style="display:none" onclick="overlayClick(event)">
-    <div class="modal" onclick="event.stopPropagation()">
-      <div class="modal-title">
-        <span id="modal-title-text">新增資產</span>
-        <button class="close-btn" onclick="closeModal()"><i class="ti ti-x"></i></button>
+<div class="page" id="page-rebal">
+  <div class="rebal-section">
+    <div class="rebal-title">目前配置 <span style="font-size:11px;font-weight:400;color:var(--text2)">（自動從持倉帶入）</span></div>
+    <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);font-weight:500">
+      <span>標的</span><span style="text-align:right">現在佔比</span><span style="text-align:center;width:70px">目標%</span><span></span>
+    </div>
+    <div id="rebal-rows"></div>
+    <div class="add-row">
+      <div style="flex:1"><input id="rebal-add-ticker" type="text" placeholder="新增標的代碼"></div>
+      <button class="btn-primary" style="padding:8px 14px" onclick="rebalAddRow()"><i class="ti ti-plus"></i></button>
+    </div>
+  </div>
+
+  <div class="rebal-section">
+    <div class="rebal-title">再平衡計算器</div>
+    <div style="margin-bottom:12px">
+      <label>本期可投入金額（TWD）</label>
+      <input id="rebal-amount" type="number" placeholder="例如：30000">
+    </div>
+    <button class="btn-primary" style="width:100%;justify-content:center" onclick="calcRebal()">
+      <i class="ti ti-calculator"></i> 開始計算
+    </button>
+    <div id="rebal-result" style="display:none" class="rebal-result"></div>
+  </div>
+</div>
+
+<div class="page" id="page-settings">
+  <div class="settings-section">
+    <div class="settings-title">主題</div>
+    <div class="theme-grid">
+      <div class="theme-btn active" id="theme-arctic" onclick="setTheme('arctic')">
+        <div class="theme-ph" style="background:linear-gradient(135deg,#e0f2fe,#7dd3fc);color:#0c4a6e">Arctic<br><span style="font-size:10px;font-weight:400">極光冰藍</span></div>
+        <div class="theme-pb" style="background:#f0f9ff;color:#0369a1">TWD 2,609,860<br><span style="color:#0d6b3b">+TWD 71,840</span></div>
       </div>
-      <div id="step1">
-        <div class="type-grid">
-          <button class="type-btn" onclick="pickType('tw_stock')" id="t-tw_stock"><span class="type-icon"><i class="ti ti-building-bank"></i></span>台股</button>
-          <button class="type-btn" onclick="pickType('us_stock')" id="t-us_stock"><span class="type-icon"><i class="ti ti-chart-candle"></i></span>美股</button>
-          <button class="type-btn" onclick="pickType('uk_stock')" id="t-uk_stock"><span class="type-icon"><i class="ti ti-chart-candle"></i></span>英股</button>
-          <button class="type-btn" onclick="pickType('tw_fund')" id="t-tw_fund"><span class="type-icon"><i class="ti ti-receipt"></i></span>台灣基金</button>
-          <button class="type-btn" onclick="pickType('twd_cash')" id="t-twd_cash"><span class="type-icon"><i class="ti ti-cash"></i></span>台幣現金</button>
-          <button class="type-btn" onclick="pickType('usd_cash')" id="t-usd_cash"><span class="type-icon"><i class="ti ti-cash"></i></span>美元現金</button>
-          <button class="type-btn" onclick="pickType('crypto')" id="t-crypto"><span class="type-icon"><i class="ti ti-currency-bitcoin"></i></span>加密貨幣</button>
-        </div>
-        <div class="btn-row"><button class="btn-secondary" onclick="closeModal()">取消</button></div>
+      <div class="theme-btn" id="theme-midnight" onclick="setTheme('midnight')">
+        <div class="theme-ph" style="background:linear-gradient(135deg,#0f0c29,#302b63);color:#e0e7ff">Midnight<br><span style="font-size:10px;font-weight:400">深邃夜藍</span></div>
+        <div class="theme-pb" style="background:#1a1a2e;color:#a5b4fc">TWD 2,609,860<br><span style="color:#34d399">+TWD 71,840</span></div>
       </div>
-      <div id="step2" style="display:none">
-        <div id="form-stock">
-          <div class="frow">
-            <div>
-              <label>代碼</label>
-              <div class="ac-wrap">
-                <input id="f-ticker" type="text" placeholder="輸入代碼或關鍵字搜尋" oninput="onTickerInput()" autocomplete="off">
-                <div id="ac-dropdown" class="ac-dropdown" style="display:none"></div>
-              </div>
-            </div>
-            <div><label>名稱</label><input id="f-name" type="text" placeholder="自動帶入"></div>
-          </div>
-          <div class="frow3">
-            <div><label>股數</label><input id="f-shares" type="number" placeholder="1000" oninput="calcFee()"></div>
-            <div><label>買入成本（每股）</label><input id="f-cost" type="number" placeholder="500" oninput="calcFee()"></div>
-            <div>
-              <label>現價（每股）</label>
-              <input id="f-price" type="number" placeholder="查詢中…">
-              <div class="price-status" id="price-status"></div>
-            </div>
-          </div>
-          <div class="frow">
-            <div><label>買入日期</label><input id="f-date" type="date"></div>
-            <div><label>歸屬</label><select id="f-owner"><option value="me">我</option><option value="wife">太太</option></select></div>
-          </div>
-          <div><label>備註</label><textarea id="f-note" rows="2" placeholder="選填…"></textarea></div>
-          <div class="sec-div">
-            <div class="sec-label">手續費</div>
-            <div class="frow3" style="margin-bottom:6px">
-              <div><label>計算方式</label><select id="f-fee-type" onchange="updateFeeUI()"><option value="pct">依比例（%）</option><option value="manual">自行輸入</option><option value="none">無</option></select></div>
-              <div id="fpw"><label>費率</label><div class="iuw"><input id="f-fee-pct" type="number" step="0.001" value="0.1425" oninput="calcFee()"><span class="iunit">%</span></div></div>
-              <div id="fmw" style="display:none"><label>金額</label><div class="iuw"><input id="f-fee-manual" type="number" placeholder="0" oninput="calcFee()"><span class="iunit" id="funit">TWD</span></div></div>
-            </div>
-            <div class="fee-preview" id="fee-preview">請先輸入股數與買入成本</div>
-          </div>
-        </div>
-        <div id="form-cash" style="display:none">
-          <div class="frow">
-            <div><label id="cash-lbl">金額（TWD）</label><input id="f-cash-amt" type="number" placeholder="500000"></div>
-            <div><label>歸屬</label><select id="f-cash-owner"><option value="me">我</option><option value="wife">太太</option></select></div>
-          </div>
-          <div><label>備註</label><textarea id="f-cash-note" rows="2" placeholder="活存、定存…"></textarea></div>
-        </div>
-        <div id="form-crypto" style="display:none">
-          <div class="frow">
-            <div>
-              <label>幣種</label>
-              <div class="ac-wrap">
-                <input id="f-cry-ticker" type="text" placeholder="BTC / ETH / SOL" oninput="onCryptoInput()" autocomplete="off">
-                <div id="ac-crypto-dd" class="ac-dropdown" style="display:none"></div>
-              </div>
-            </div>
-            <div><label>數量</label><input id="f-cry-qty" type="number" step="any" placeholder="0.5"></div>
-          </div>
-          <div class="frow">
-            <div><label>買入成本（USD/顆）</label><input id="f-cry-cost" type="number" placeholder="40000"></div>
-            <div>
-              <label>現價（USD）</label>
-              <input id="f-cry-price" type="number" placeholder="查詢中…">
-              <div class="price-status" id="cry-price-status"></div>
-            </div>
-          </div>
-          <div class="frow">
-            <div><label>買入日期</label><input id="f-cry-date" type="date"></div>
-            <div><label>歸屬</label><select id="f-cry-owner"><option value="me">我</option><option value="wife">太太</option></select></div>
-          </div>
-          <div><label>備註</label><textarea id="f-cry-note" rows="2" placeholder="選填…"></textarea></div>
-        </div>
-        <div class="btn-row">
-          <button class="btn-primary" id="submit-btn" onclick="submitAsset()">新增</button>
-          <button class="btn-secondary" id="back-btn" onclick="goStep1()">返回</button>
-          <button class="btn-secondary" onclick="closeModal()">取消</button>
-          <button class="btn-danger" id="delete-btn" style="display:none" onclick="deleteAsset()">刪除</button>
-        </div>
+      <div class="theme-btn" id="theme-forest" onclick="setTheme('forest')">
+        <div class="theme-ph" style="background:linear-gradient(135deg,#134e4a,#064e3b);color:#dcfce7">Forest<br><span style="font-size:10px;font-weight:400">沉穩森綠</span></div>
+        <div class="theme-pb" style="background:#0f2419;color:#86efac">TWD 2,609,860<br><span style="color:#34d399">+TWD 71,840</span></div>
+      </div>
+      <div class="theme-btn" id="theme-champagne" onclick="setTheme('champagne')">
+        <div class="theme-ph" style="background:linear-gradient(135deg,#78350f,#b45309);color:#fef3c7">Champagne<br><span style="font-size:10px;font-weight:400">低調奢華</span></div>
+        <div class="theme-pb" style="background:#1c1410;color:#fcd34d">TWD 2,609,860<br><span style="color:#34d399">+TWD 71,840</span></div>
       </div>
     </div>
   </div>
 
+  <div class="settings-section">
+    <div class="settings-title">帳戶名稱</div>
+    <div class="settings-row">
+      <div><div class="settings-label" id="set-name-me">我 / 太太</div><div class="settings-sub">帳戶名稱</div></div>
+      <button class="btn-secondary" onclick="toggleRename()">編輯</button>
+    </div>
+    <div id="rename-bar" style="display:none">
+      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+        <div><label>名稱 1</label><input id="rn-me" type="text" style="width:110px" value="我"></div>
+        <div><label>名稱 2</label><input id="rn-wife" type="text" style="width:110px" value="太太"></div>
+        <button class="btn-primary" onclick="applyRename()">套用</button>
+      </div>
+    </div>
+  </div>
 </div>
+
+<nav class="bottom-nav">
+  <button class="nav-btn active" onclick="switchPage('home')" id="nav-home">
+    <i class="ti ti-home"></i>首頁
+  </button>
+  <button class="nav-btn" onclick="switchPage('rebal')" id="nav-rebal">
+    <i class="ti ti-scale"></i>再平衡
+  </button>
+  <button class="nav-btn" onclick="switchPage('settings')" id="nav-settings">
+    <i class="ti ti-settings"></i>設定
+  </button>
+</nav>
+
+<div id="modal-overlay" class="modal-overlay" style="display:none" onclick="overlayClick(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">
+      <span id="modal-title-text">新增資產</span>
+      <button class="close-btn" onclick="closeModal()"><i class="ti ti-x"></i></button>
+    </div>
+    <div id="step1">
+      <div class="type-grid">
+        <button class="type-btn" onclick="pickType('tw_stock')" id="t-tw_stock"><span class="type-icon"><i class="ti ti-building-bank"></i></span>台股</button>
+        <button class="type-btn" onclick="pickType('us_stock')" id="t-us_stock"><span class="type-icon"><i class="ti ti-chart-candle"></i></span>美股</button>
+        <button class="type-btn" onclick="pickType('uk_stock')" id="t-uk_stock"><span class="type-icon"><i class="ti ti-chart-candle"></i></span>英股</button>
+        <button class="type-btn" onclick="pickType('tw_fund')" id="t-tw_fund"><span class="type-icon"><i class="ti ti-receipt"></i></span>台灣基金</button>
+        <button class="type-btn" onclick="pickType('twd_cash')" id="t-twd_cash"><span class="type-icon"><i class="ti ti-cash"></i></span>台幣現金</button>
+        <button class="type-btn" onclick="pickType('usd_cash')" id="t-usd_cash"><span class="type-icon"><i class="ti ti-cash"></i></span>美元現金</button>
+        <button class="type-btn" onclick="pickType('crypto')" id="t-crypto"><span class="type-icon"><i class="ti ti-currency-bitcoin"></i></span>加密貨幣</button>
+      </div>
+      <div class="btn-row"><button class="btn-secondary" onclick="closeModal()">取消</button></div>
+    </div>
+    <div id="step2" style="display:none">
+      <div id="form-stock">
+        <div class="frow">
+          <div><label>代碼</label><div class="ac-wrap"><input id="f-ticker" type="text" placeholder="輸入代碼或關鍵字" oninput="onTickerInput()" autocomplete="off"><div id="ac-dropdown" class="ac-dropdown" style="display:none"></div></div></div>
+          <div><label>名稱</label><input id="f-name" type="text" placeholder="自動帶入"></div>
+        </div>
+        <div class="frow3">
+          <div><label>股數</label><input id="f-shares" type="number" placeholder="1000" oninput="calcFee()"></div>
+          <div><label>買入成本（每股）</label><input id="f-cost" type="number" placeholder="500" oninput="calcFee()"></div>
+          <div><label>現價（每股）</label><input id="f-price" type="number" placeholder="查詢中…"><div class="price-status" id="price-status"></div></div>
+        </div>
+        <div class="frow">
+          <div><label>買入日期</label><input id="f-date" type="date"></div>
+          <div><label>歸屬</label><select id="f-owner"><option value="me">我</option><option value="wife">太太</option></select></div>
+        </div>
+        <div><label>備註</label><textarea id="f-note" rows="2" placeholder="選填…"></textarea></div>
+        <div class="sec-div">
+          <div class="sec-label">手續費</div>
+          <div class="frow3" style="margin-bottom:6px">
+            <div><label>計算方式</label><select id="f-fee-type" onchange="updateFeeUI()"><option value="pct">依比例（%）</option><option value="manual">自行輸入</option><option value="none">無</option></select></div>
+            <div id="fpw"><label>費率</label><div class="iuw"><input id="f-fee-pct" type="number" step="0.001" value="0.1425" oninput="calcFee()"><span class="iunit">%</span></div></div>
+            <div id="fmw" style="display:none"><label>金額</label><div class="iuw"><input id="f-fee-manual" type="number" placeholder="0" oninput="calcFee()"><span class="iunit" id="funit">TWD</span></div></div>
+          </div>
+          <div class="fee-preview" id="fee-preview">請先輸入股數與買入成本</div>
+        </div>
+      </div>
+      <div id="form-cash" style="display:none">
+        <div class="frow">
+          <div><label id="cash-lbl">金額（TWD）</label><input id="f-cash-amt" type="number" placeholder="500000"></div>
+          <div><label>歸屬</label><select id="f-cash-owner"><option value="me">我</option><option value="wife">太太</option></select></div>
+        </div>
+        <div><label>備註</label><textarea id="f-cash-note" rows="2" placeholder="活存、定存…"></textarea></div>
+      </div>
+      <div id="form-crypto" style="display:none">
+        <div class="frow">
+          <div><label>幣種</label><div class="ac-wrap"><input id="f-cry-ticker" type="text" placeholder="BTC / ETH / SOL" oninput="onCryptoInput()" autocomplete="off"><div id="ac-crypto-dd" class="ac-dropdown" style="display:none"></div></div></div>
+          <div><label>數量</label><input id="f-cry-qty" type="number" step="any" placeholder="0.5"></div>
+        </div>
+        <div class="frow">
+          <div><label>買入成本（USD/顆）</label><input id="f-cry-cost" type="number" placeholder="40000"></div>
+          <div><label>現價（USD）</label><input id="f-cry-price" type="number" placeholder="查詢中…"><div class="price-status" id="cry-price-status"></div></div>
+        </div>
+        <div class="frow">
+          <div><label>買入日期</label><input id="f-cry-date" type="date"></div>
+          <div><label>歸屬</label><select id="f-cry-owner"><option value="me">我</option><option value="wife">太太</option></select></div>
+        </div>
+        <div><label>備註</label><textarea id="f-cry-note" rows="2" placeholder="選填…"></textarea></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn-primary" id="submit-btn" onclick="submitAsset()">新增</button>
+        <button class="btn-secondary" id="back-btn" onclick="goStep1()">返回</button>
+        <button class="btn-secondary" onclick="closeModal()">取消</button>
+        <button class="btn-danger" id="delete-btn" style="display:none" onclick="deleteAsset()">刪除</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>
