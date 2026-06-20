@@ -13,11 +13,11 @@
 <div class="page active" id="page-home">
   <div class="profile-bar">
     <button class="profile-btn active" onclick="setProfile('me')" id="pb-me">
-      <span class="avatar" style="background:#dbeafe;color:#1d4ed8">我</span>
+      <span class="avatar" id="av-me" style="background:#dbeafe;color:#1d4ed8">我</span>
       <span id="lbl-me">我的資產</span>
     </button>
     <button class="profile-btn" onclick="setProfile('wife')" id="pb-wife">
-      <span class="avatar" style="background:#fce7f3;color:#9d174d">妻</span>
+      <span class="avatar" id="av-wife" style="background:#fce7f3;color:#9d174d">太</span>
       <span id="lbl-wife">太太的資產</span>
     </button>
     <button class="profile-btn" onclick="setProfile('family')" id="pb-family">
@@ -160,17 +160,25 @@
         <div class="theme-ph" style="background:linear-gradient(135deg,#e0f2fe,#7dd3fc);color:#0c4a6e">Arctic<br><span style="font-size:10px;font-weight:400">極光冰藍</span></div>
         <div class="theme-pb" style="background:#f0f9ff;color:#0369a1">TWD 2,609,860<br><span style="color:#0d6b3b">+TWD 71,840</span></div>
       </div>
-      <div class="theme-btn" id="theme-midnight" onclick="setTheme('midnight')">
-        <div class="theme-ph" style="background:linear-gradient(135deg,#0f0c29,#302b63);color:#e0e7ff">Midnight<br><span style="font-size:10px;font-weight:400">深邃夜藍</span></div>
-        <div class="theme-pb" style="background:#1a1a2e;color:#a5b4fc">TWD 2,609,860<br><span style="color:#34d399">+TWD 71,840</span></div>
+      <div class="theme-btn" id="theme-tiffany" onclick="setTheme('tiffany')">
+        <div class="theme-ph" style="background:linear-gradient(135deg,#b8ede9,#6dcfc8);color:#0a3330">Tiffany<br><span style="font-size:10px;font-weight:400">薄荷藍綠</span></div>
+        <div class="theme-pb" style="background:#edfaf8;color:#0a6657">TWD 2,609,860<br><span style="color:#0a6657">+TWD 71,840</span></div>
       </div>
-      <div class="theme-btn" id="theme-forest" onclick="setTheme('forest')">
-        <div class="theme-ph" style="background:linear-gradient(135deg,#134e4a,#064e3b);color:#dcfce7">Forest<br><span style="font-size:10px;font-weight:400">沉穩森綠</span></div>
-        <div class="theme-pb" style="background:#0f2419;color:#86efac">TWD 2,609,860<br><span style="color:#34d399">+TWD 71,840</span></div>
+      <div class="theme-btn" id="theme-matcha" onclick="setTheme('matcha')">
+        <div class="theme-ph" style="background:linear-gradient(135deg,#d4d6cc,#acaea2);color:#2a2d24">抹茶奶昔<br><span style="font-size:10px;font-weight:400">霧灰綠</span></div>
+        <div class="theme-pb" style="background:#f2f3f0;color:#4a4d40">TWD 2,609,860<br><span style="color:#2d6b2d">+TWD 71,840</span></div>
       </div>
-      <div class="theme-btn" id="theme-champagne" onclick="setTheme('champagne')">
-        <div class="theme-ph" style="background:linear-gradient(135deg,#78350f,#b45309);color:#fef3c7">Champagne<br><span style="font-size:10px;font-weight:400">低調奢華</span></div>
-        <div class="theme-pb" style="background:#1c1410;color:#fcd34d">TWD 2,609,860<br><span style="color:#34d399">+TWD 71,840</span></div>
+      <div class="theme-btn" id="theme-milktea" onclick="setTheme('milktea')">
+        <div class="theme-ph" style="background:linear-gradient(135deg,#e8d5bc,#cda581);color:#3d2a0f">奶茶<br><span style="font-size:10px;font-weight:400">溫暖棕金</span></div>
+        <div class="theme-pb" style="background:#fdf5ec;color:#7a4a1a">TWD 2,609,860<br><span style="color:#2d5a2d">+TWD 71,840</span></div>
+      </div>
+      <div class="theme-btn" id="theme-coral" onclick="setTheme('coral')">
+        <div class="theme-ph" style="background:linear-gradient(135deg,#f8b8b8,#f08080);color:#5a1a1a">珊瑚<br><span style="font-size:10px;font-weight:400">珊瑚紅</span></div>
+        <div class="theme-pb" style="background:#fff5f5;color:#8a2a2a">TWD 2,609,860<br><span style="color:#1a5e1a">+TWD 71,840</span></div>
+      </div>
+      <div class="theme-btn" id="theme-morandi" onclick="setTheme('morandi')">
+        <div class="theme-ph" style="background:linear-gradient(135deg,#d4c4e0,#967aa1);color:#2d1a38">莫蘭迪紫<br><span style="font-size:10px;font-weight:400">低飽和霧紫</span></div>
+        <div class="theme-pb" style="background:#f5f0f8;color:#5a3d6e">TWD 2,609,860<br><span style="color:#1a5e1a">+TWD 71,840</span></div>
       </div>
     </div>
   </div>
