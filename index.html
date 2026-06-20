@@ -13,16 +13,13 @@
 <div class="page active" id="page-home">
   <div class="profile-bar">
     <button class="profile-btn active" onclick="setProfile('me')" id="pb-me">
-      <span class="avatar" id="av-me" style="background:#dbeafe;color:#1d4ed8">我</span>
       <span id="lbl-me">我的資產</span>
     </button>
     <button class="profile-btn" onclick="setProfile('wife')" id="pb-wife">
-      <span class="avatar" id="av-wife" style="background:#fce7f3;color:#9d174d">太</span>
       <span id="lbl-wife">太太的資產</span>
     </button>
     <button class="profile-btn" onclick="setProfile('family')" id="pb-family">
-      <span class="avatar" style="background:#dcfce7;color:#166534"><i class="ti ti-home" style="font-size:12px"></i></span>
-      家庭總資產
+      總資產
     </button>
   </div>
 
@@ -35,7 +32,7 @@
   </div>
 
   <div class="total-block">
-    <div class="total-label" id="total-label">我的總資產淨值</div>
+    <div class="total-label" id="total-label">我的資產淨值</div>
     <div class="total-val" id="total-val">TWD —</div>
     <div class="total-sub" id="today-sub">今日損益 <span>—</span></div>
     <div class="debt-toggle-row" id="debt-toggle-row" style="display:none">
@@ -140,7 +137,6 @@
     </div>
     <div id="debt-list"></div>
   </div>
-
   <div id="debt-empty-state">
     <div class="empty-state">
       <div class="empty-icon"><i class="ti ti-credit-card"></i></div>
@@ -148,7 +144,6 @@
       <div class="empty-sub">如果有貸款或負債<br>點擊右下角 + 新增以追蹤</div>
     </div>
   </div>
-
   <button class="debt-fab" onclick="openDebtModal()"><i class="ti ti-plus"></i></button>
 </div>
 
@@ -182,6 +177,24 @@
       </div>
     </div>
   </div>
+
+  <div class="settings-section">
+    <div class="settings-title">總資產帳戶選擇</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px">選擇哪些帳戶納入「總資產」計算</div>
+    <div class="settings-row">
+      <div class="settings-label" id="family-check-me-label">我的資產</div>
+      <div class="toggle-switch on" id="family-toggle-me" onclick="toggleFamilyMember('me')">
+        <div class="toggle-dot"></div>
+      </div>
+    </div>
+    <div class="settings-row">
+      <div class="settings-label" id="family-check-wife-label">太太的資產</div>
+      <div class="toggle-switch on" id="family-toggle-wife" onclick="toggleFamilyMember('wife')">
+        <div class="toggle-dot"></div>
+      </div>
+    </div>
+  </div>
+
   <div class="settings-section">
     <div class="settings-title">帳戶名稱</div>
     <div class="settings-row">
