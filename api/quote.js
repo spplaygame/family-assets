@@ -66,58 +66,78 @@ export default async function handler(req, res) {
       res.json(result);
 
     } else if (type === 'fund_search') {
-      // 台灣基金搜尋 - 投信投顧公會
-      const keyword = encodeURIComponent(q || '');
-      const domestic = `https://www.fundclear.com.tw/fundclearWeb/ESBFundService?action=getFundListByName&fundName=${keyword}&fundType=0`;
-      const foreign = `https://www.fundclear.com.tw/fundclearWeb/ESBFundService?action=getFundListByName&fundName=${keyword}&fundType=1`;
-      const [r1, r2] = await Promise.allSettled([
-        fetch(domestic, { headers: { 'User-Agent': 'Mozilla/5.0' } }),
-        fetch(foreign, { headers: { 'User-Agent': 'Mozilla/5.0' } }),
-      ]);
+      // 境內基金：投信投顧公會 CSV
+      // 境外基金：台灣集保 CSV
+      const keyword = (q || '').toLowerCase();
       let results = [];
-      if (r1.status === 'fulfilled') {
-        try {
-          const d = await r1.value.json();
-          const list = d?.result || d?.data || d || [];
-          if (Array.isArray(list)) {
-            results = results.concat(list.slice(0, 10).map(f => ({
-              id: f.fundCode || f.isin || '',
-              name: f.fundName || f.name || '',
-              currency: f.currency || 'TWD',
-              nav: parseFloat(f.nav || f.navPrice || 0),
-              navDate: f.navDate || '',
-              type: 'domestic',
-            })));
+
+      // 境內基金
+      try {
+        const r1 = await fetch('https://www.sitca.org.tw/MemberK0000/F/03/nav.csv', {
+          headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        const text = await r1.text();
+        const lines = text.split('\n').slice(1); // 跳過標題
+        const matched = [];
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const cols = line.split(',');
+          const name = (cols[5] || '').trim();
+          const code = (cols[4] || '').trim();
+          const nav  = parseFloat(cols[6]) || 0;
+          const cur  = (cols[10] || 'TWD').trim();
+          const date = (cols[0] || '').trim();
+          if (name.includes(keyword) || code.includes(keyword)) {
+            matched.push({ id: code, name, currency: cur, nav, navDate: date, type: 'domestic' });
           }
-        } catch {}
-      }
-      if (r2.status === 'fulfilled') {
-        try {
-          const d = await r2.value.json();
-          const list = d?.result || d?.data || d || [];
-          if (Array.isArray(list)) {
-            results = results.concat(list.slice(0, 10).map(f => ({
-              id: f.fundCode || f.isin || '',
-              name: f.fundName || f.name || '',
-              currency: f.currency || 'USD',
-              nav: parseFloat(f.nav || f.navPrice || 0),
-              navDate: f.navDate || '',
-              type: 'foreign',
-            })));
+          if (matched.length >= 15) break;
+        }
+        results = results.concat(matched);
+      } catch(e) { console.warn('domestic fund error', e.message); }
+
+      // 境外基金
+      try {
+        const r2 = await fetch('https://opendata.tdcc.com.tw/getOD.ashx?id=3-4', {
+          headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        const text = await r2.text();
+        const lines = text.split('\n').slice(1);
+        const matched = [];
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const cols = line.split(',');
+          const name = (cols[1] || '').trim();
+          const code = (cols[0] || '').trim();
+          const nav  = parseFloat(cols[3]) || 0;
+          const cur  = (cols[5] || 'USD').trim();
+          const date = (cols[2] || '').trim();
+          if (name.toLowerCase().includes(keyword) || code.toLowerCase().includes(keyword)) {
+            matched.push({ id: code, name, currency: cur, nav, navDate: date, type: 'foreign' });
           }
-        } catch {}
-      }
-      res.json({ result: results });
+          if (matched.length >= 15) break;
+        }
+        results = results.concat(matched);
+      } catch(e) { console.warn('foreign fund error', e.message); }
+
+      res.json({ result: results.slice(0, 20) });
 
     } else if (type === 'fund_nav') {
-      // 查單一基金淨值
-      const url = `https://www.fundclear.com.tw/fundclearWeb/ESBFundService?action=getFundNavByCode&fundCode=${encodeURIComponent(symbol)}`;
-      const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-      const d = await r.json();
-      const nav = parseFloat(d?.nav || d?.navPrice || d?.result?.nav || 0);
-      const prevNav = parseFloat(d?.prevNav || d?.result?.prevNav || nav);
-      if (!nav) { res.status(404).json({ error: 'no nav' }); return; }
-      res.json({ nav, prevNav, navDate: d?.navDate || d?.result?.navDate || '' });
+      // 用代碼查單一境內基金最新淨值
+      const code = symbol;
+      const r = await fetch('https://www.sitca.org.tw/MemberK0000/F/03/nav.csv', {
+        headers: { 'User-Agent': 'Mozilla/5.0' }
+      });
+      const text = await r.text();
+      const lines = text.split('\n').slice(1);
+      for (const line of lines) {
+        const cols = line.split(',');
+        if ((cols[4] || '').trim() === code) {
+          const nav = parseFloat(cols[6]) || 0;
+          res.json({ nav, prevNav: nav, navDate: (cols[0] || '').trim() });
+          return;
+        }
+      }
+      res.status(404).json({ error: 'fund not found' });
 
     } else {
       res.status(400).json({ error: 'unknown type' });
