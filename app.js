@@ -532,7 +532,6 @@ function renderSections(all) {
         +'<td class="rc"><div class="'+CLS(groupToday)+'" style="font-size:12px">'+(groupToday?((groupToday>=0?'+':'')+fmtCur(groupToday,cat.cur)):'—')+'</div></td>'
         +'<td class="rc">'+fxCell+'</td>'
         +'<td class="rc"><div style="font-weight:700;font-size:12px">'+fmtCur(g.items.reduce((s,a)=>s+assetValNative(a),0),cat.cur)+'</div>'
-        +(cat.cur!=='TWD'?'<div class="mini">'+fmtTWD(groupVal)+'</div>':'')
         +'<div class="mini '+CLS(groupUnreal)+'">'+(groupUnreal?(groupUnreal>=0?'+':'')+fmtCur(groupUnreal,cat.cur)+' ('+PCT(unrealPct)+')':'—')+'</div></td></tr>';
     }).join('');
 
