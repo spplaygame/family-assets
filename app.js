@@ -3,17 +3,20 @@ const CATS = {
   tw_stock:{label:'台股',cur:'TWD',color:'#378ADD',badge:'btw'},
   us_stock:{label:'美股',cur:'USD',color:'#639922',badge:'bus'},
   uk_stock:{label:'英股',cur:'GBP',color:'#BA7517',badge:'buk'},
-  uk_stock_usd:{label:'英股(USD)',cur:'USD',color:'#BA7517',badge:'buk'},
+  uk_stock_usd:{label:'英股',cur:'USD',color:'#BA7517',badge:'buk'},
   tw_fund:{label:'台灣基金',cur:'TWD',color:'#7F77DD',badge:'bfund'},
   twd_cash:{label:'台幣現金',cur:'TWD',color:'#888780',badge:''},
   usd_cash:{label:'美元現金',cur:'USD',color:'#1D9E75',badge:'bus'},
   crypto:{label:'加密貨幣',cur:'USD',color:'#D85A30',badge:'bcrypto'},
+  real_estate:{label:'不動產',cur:'TWD',color:'#E07B54',badge:''},
+  gold:{label:'黃金',cur:'USD',color:'#D4AF37',badge:''},
 };
 const TYPE_GROUPS={
   股票:{types:['tw_stock','us_stock','uk_stock','uk_stock_usd'],color:'#378ADD'},
   基金:{types:['tw_fund'],color:'#7F77DD'},
   現金:{types:['twd_cash','usd_cash'],color:'#888780'},
   加密貨幣:{types:['crypto'],color:'#D85A30'},
+  實物資產:{types:['real_estate','gold'],color:'#E07B54'},
 };
 const DEBT_TYPES={
   mortgage:{label:'🏠 房貸'},car:{label:'🚗 車貸'},
@@ -22,13 +25,38 @@ const DEBT_TYPES={
 };
 const CRYPTO_IDS={BTC:'bitcoin',ETH:'ethereum',SOL:'solana',BNB:'binancecoin',XRP:'ripple',ADA:'cardano',DOGE:'dogecoin',AVAX:'avalanche-2'};
  
+// 台股中文名稱（補充 Yahoo Finance API 回傳英文的情況）
+const TW_NAMES={
+  '2330':'台積電','2317':'鴻海','2454':'聯發科','2882':'國泰金','2881':'富邦金',
+  '2891':'中信金','2886':'兆豐金','2884':'玉山金','2885':'元大金','2892':'第一金',
+  '2303':'聯電','2308':'台達電','2412':'中華電','2002':'中鋼','2382':'廣達',
+  '2395':'研華','2357':'華碩','2379':'瑞昱','3711':'日月光投控','2327':'國巨',
+  '6770':'力積電','3008':'大立光','2408':'南亞科','2376':'技嘉','2371':'大同',
+  '0050':'元大台灣50','0056':'元大高股息','006208':'富邦台灣50','00878':'國泰永續高股息',
+  '00881':'國泰台灣5G+','00919':'群益台灣精選高息','00929':'復華台灣科技優息',
+  '1301':'台塑','1303':'南亞','1326':'台化','2105':'正新','2207':'和泰車',
+  '2301':'光寶科','2345':'智邦','2353':'宏碁','2356':'英業達','2358':'廷鑫',
+  '2360':'致茂','2385':'群光','2392':'正崴','2409':'友達','2474':'可成',
+  '2476':'鉅祥','2492':'華新科','2498':'宏達電','2515':'中工','2542':'興富發',
+  '2603':'長榮','2609':'陽明','2615':'萬海','2618':'長榮航','2801':'彰銀',
+  '2812':'台中銀','2820':'華票','2823':'中壽','2833':'台壽保','2834':'臺企銀',
+  '2836':'高雄銀','2838':'聯邦銀','2845':'遠東銀','2847':'大眾銀','2849':'安泰銀',
+  '2850':'新產','2851':'中再保','2852':'第一保','2855':'統一證','2867':'三商壽',
+  '2880':'華南金','2883':'開發金','2887':'台新金','2888':'新光金','2889':'國票金',
+  '2890':'永豐金','2893':'王道銀行','3034':'聯詠','3037':'欣興','3045':'台灣大',
+  '3481':'群創','3673':'TPK','3690':'微星','4904':'遠傳','4938':'和碩',
+  '5880':'合庫金','6415':'矽力-KY','6446':'藥華藥','6488':'環球晶','6505':'台塑化',
+  '8046':'南電','9910':'豐泰',
+};
+ 
 function toYahooSymbol(ticker,type){
   if(type==='tw_stock'||type==='tw_fund') return ticker+'.TW';
   if(type==='uk_stock'||type==='uk_stock_usd') return ticker+'.L';
+  if(type==='gold') return 'GC=F';
   return ticker;
 }
  
-let profile='me',chartPeriod='1M',dim='detail',selType=null;
+let profile='me',chartPeriod='1M',dim='detail',selType=null,selUKCur='USD';
 let trendChart=null,donutChart=null,fetching=false;
 let names={me:'我',wife:'太太'};
 let assets=[],debts=[];
@@ -120,13 +148,32 @@ function updateFamilyToggleUI(){
   });
 }
  
-async function proxyQuote(s){const r=await fetch(API+'?type=quote&symbol='+encodeURIComponent(s));const d=await r.json();if(d.error)throw new Error(d.error);return d;}
-async function proxySearch(q,market){
-  const suffix=market==='tw'?'.TW':market==='uk'?'.L':'';
-  const query=suffix&&!q.includes('.')?q+suffix:q;
-  const r=await fetch(API+'?type=search&symbol='+encodeURIComponent(query));
+async function proxyQuote(s){
+  const r=await fetch(API+'?type=quote&symbol='+encodeURIComponent(s));
   const d=await r.json();
-  return d.result||[];
+  if(d.error)throw new Error(d.error);
+  return d;
+}
+async function proxySearch(q,type){
+  let query=q;
+  if(type==='tw_stock'||type==='tw_fund'){
+    // 台股：直接搜尋代碼
+    query=q+'.TW';
+  }else if(type==='uk_stock'||type==='uk_stock_usd'){
+    query=q+'.L';
+  }
+  const r=await fetch(API+'?type=search&symbol='+encodeURIComponent(q));
+  const d=await r.json();
+  const results=d.result||[];
+  // 依類型過濾
+  if(type==='tw_stock'||type==='tw_fund'){
+    return results.filter(x=>(x.symbol||'').endsWith('.TW'));
+  }else if(type==='uk_stock'||type==='uk_stock_usd'){
+    return results.filter(x=>(x.symbol||'').endsWith('.L'));
+  }else if(type==='us_stock'){
+    return results.filter(x=>!(x.symbol||'').includes('.') || (x.symbol||'').endsWith('=F'));
+  }
+  return results;
 }
 async function proxyCrypto(ids){const r=await fetch(API+'?type=crypto&ids='+encodeURIComponent(ids));return await r.json();}
 async function proxyFX(){const r=await fetch(API+'?type=fx');return await r.json();}
@@ -148,9 +195,18 @@ async function fetchAll(){
   btn.disabled=true;
   btn.innerHTML='<span class="spin"><i class="ti ti-loader-2"></i></span> 查詢中…';
   try{await fetchFX();updateFxBar();}catch(e){console.warn('FX fail',e);}
-  for(const a of assets.filter(x=>['tw_stock','tw_fund','us_stock','uk_stock','uk_stock_usd'].includes(x.type))){
-    try{const q=await proxyQuote(toYahooSymbol(a.ticker,a.type));a.prevPrice=q.prevClose;a.price=q.price;if(q.name&&!a.name)a.name=q.name;a.priceSource='live';}
-    catch{a.priceSource='error';}
+  for(const a of assets.filter(x=>['tw_stock','tw_fund','us_stock','uk_stock','uk_stock_usd','gold'].includes(x.type))){
+    try{
+      const sym=a.type==='gold'?'GC=F':toYahooSymbol(a.ticker,a.type);
+      const q=await proxyQuote(sym);
+      a.prevPrice=q.prevClose;a.price=q.price;
+      if(q.name&&!a.name) a.name=q.name;
+      // 台股補中文名
+      if((a.type==='tw_stock'||a.type==='tw_fund')&&TW_NAMES[a.ticker]){
+        a.name=TW_NAMES[a.ticker];
+      }
+      a.priceSource='live';
+    }catch{a.priceSource='error';}
   }
   const ca=assets.filter(x=>x.type==='crypto');
   if(ca.length){
@@ -217,6 +273,16 @@ function totalDebtTWD(){return getFilteredDebts().reduce((s,d)=>s+debtToTWD(d),0
 function totalMonthlyTWD(){return getFilteredDebts().reduce((s,d)=>s+getDebtMonthlyTWD(d),0);}
 function getFilteredDebts(){return profile==='family'?debts:debts.filter(d=>d.owner===profile);}
  
+// 英股幣別選擇
+function setUKCur(cur){
+  selUKCur=cur;
+  document.getElementById('uk-cur-usd').classList.toggle('active',cur==='USD');
+  document.getElementById('uk-cur-gbp').classList.toggle('active',cur==='GBP');
+  // 更新 selType
+  selType=cur==='USD'?'uk_stock_usd':'uk_stock';
+  document.getElementById('funit').textContent=cur;
+}
+ 
 // 動態搜尋
 let acSearchTimer=null;
 function onTickerInput(){
@@ -228,33 +294,65 @@ function onTickerInput(){
   dd.style.display='block';
   acSearchTimer=setTimeout(async()=>{
     try{
-      const market=selType==='tw_stock'||selType==='tw_fund'?'tw':selType==='uk_stock'||selType==='uk_stock_usd'?'uk':'us';
-      const results=await proxySearch(q,market);
-      if(!results.length){dd.innerHTML='<div class="ac-item" style="color:var(--text2)">找不到結果</div>';return;}
+      const results=await proxySearch(q,selType);
+      if(!results.length){
+        // 台股嘗試直接查代碼
+        if(selType==='tw_stock'||selType==='tw_fund'){
+          dd.innerHTML='<div class="ac-item" style="color:var(--text2)">找不到，請直接輸入代碼後按 Enter</div>';
+        }else{
+          dd.innerHTML='<div class="ac-item" style="color:var(--text2)">找不到結果</div>';
+        }
+        return;
+      }
       dd.innerHTML=results.slice(0,8).map(x=>{
-        const sym=x.symbol||'';
-        const name=x.description||x.longname||sym;
-        const exchDisp=x.exchDisp||x.exchange||'';
-        return '<div class="ac-item" onclick="selectTicker(\''+sym.replace(/'/g,"\\'")+'\',' +
-          '\''+name.replace(/'/g,"\\'")+'\',\''+exchDisp.replace(/'/g,"\\'")+'\')">'+
-          '<span class="ac-sym">'+sym+'</span><span class="ac-name">'+name+(exchDisp?' · '+exchDisp:'')+'</span></div>';
+        const rawSym=x.symbol||'';
+        // 顯示代碼去掉後綴
+        const dispSym=rawSym.replace(/\.(TW|L)$/,'');
+        const name=TW_NAMES[dispSym]||x.longname||x.description||dispSym;
+        const exch=x.exchDisp||x.exchange||'';
+        return '<div class="ac-item" onclick="selectTicker(\''+rawSym.replace(/'/g,"\\'")+'\',' +
+          '\''+name.replace(/'/g,"\\'")+'\')">'+
+          '<span class="ac-sym">'+dispSym+'</span>'+
+          '<span class="ac-name">'+name+(exch?' · '+exch:'')+'</span></div>';
       }).join('');
       dd.style.display='block';
     }catch{dd.innerHTML='<div class="ac-item" style="color:var(--red)">搜尋失敗</div>';}
   },500);
 }
  
-async function selectTicker(sym,name,exch){
-  document.getElementById('f-ticker').value=sym.replace(/\.(TW|L)$/,'');
-  document.getElementById('f-name').value=name;
+// 直接按 Enter 查詢台股代碼
+document.addEventListener('DOMContentLoaded',()=>{
+  const tickerInput=document.getElementById('f-ticker');
+  if(tickerInput){
+    tickerInput.addEventListener('keydown',async(e)=>{
+      if(e.key==='Enter'){
+        e.preventDefault();
+        const q=tickerInput.value.trim().toUpperCase();
+        if(!q) return;
+        await selectTicker(
+          (selType==='tw_stock'||selType==='tw_fund')?q+'.TW':
+          (selType==='uk_stock'||selType==='uk_stock_usd')?q+'.L':q,
+          TW_NAMES[q]||q
+        );
+      }
+    });
+  }
+});
+ 
+async function selectTicker(rawSym,name){
+  const dispSym=rawSym.replace(/\.(TW|L)$/,'');
+  document.getElementById('f-ticker').value=dispSym;
+  const chName=TW_NAMES[dispSym]||name;
+  document.getElementById('f-name').value=chName;
   document.getElementById('ac-dropdown').style.display='none';
   const statusEl=document.getElementById('price-status');
   const priceEl=document.getElementById('f-price');
   statusEl.textContent='查詢即時報價…';statusEl.className='price-status price-loading';
   try{
-    const q=await proxyQuote(toYahooSymbol(sym.replace(/\.(TW|L)$/,''),selType));
+    const sym=selType==='gold'?'GC=F':rawSym;
+    const q=await proxyQuote(sym);
     priceEl.value=q.price;priceEl.dataset.prevClose=q.prevClose;
-    if(q.name) document.getElementById('f-name').value=q.name;
+    if(q.name&&!TW_NAMES[dispSym]) document.getElementById('f-name').value=q.name;
     statusEl.textContent='✓ 即時報價';statusEl.className='price-status price-ok';
   }catch{statusEl.textContent='查詢失敗，請手動輸入';statusEl.className='price-status price-err';}
 }
@@ -264,7 +362,7 @@ function onCryptoInput(){
   const q=document.getElementById('f-cry-ticker').value.trim().toUpperCase();
   const dd=document.getElementById('ac-crypto-dd');
   if(!q){dd.style.display='none';return;}
-  const known=['BTC','ETH','SOL','BNB','XRP','ADA','DOGE','AVAX'];
+  const known=Object.keys(CRYPTO_IDS);
   const matches=known.filter(s=>s.startsWith(q));
   if(!matches.length){dd.style.display='none';return;}
   dd.innerHTML=matches.map(s=>'<div class="ac-item" onclick="selectCrypto(\''+s+'\')"><span class="ac-sym">'+s+'</span></div>').join('');
@@ -287,19 +385,25 @@ async function selectCrypto(sym){
 }
  
 function assetValTWD(a){
-  if(a.type==='twd_cash') return a.amt;
-  if(a.type==='usd_cash') return a.amt*fx.usd.rate;
+  const cat=CATS[a.type]||{cur:'TWD'};
+  if(a.type==='twd_cash') return a.amt||0;
+  if(a.type==='usd_cash') return (a.amt||0)*fx.usd.rate;
   if(a.type==='crypto') return(a.qty||0)*(a.price||0)*fx.usd.rate;
-  return toTWD((a.price||0)*(a.shares||0),CATS[a.type]?.cur||'TWD');
+  if(a.type==='real_estate') return a.currentValue||a.purchasePrice||0;
+  if(a.type==='gold') return(a.qty||0)*(a.price||0)*fx.usd.rate; // 黃金以盎司USD計價
+  return toTWD((a.price||0)*(a.shares||0),cat.cur);
 }
 function assetValNative(a){
-  if(a.type==='twd_cash') return a.amt;
-  if(a.type==='usd_cash') return a.amt;
+  const cat=CATS[a.type]||{cur:'TWD'};
+  if(a.type==='twd_cash') return a.amt||0;
+  if(a.type==='usd_cash') return a.amt||0;
   if(a.type==='crypto') return(a.qty||0)*(a.price||0);
+  if(a.type==='real_estate') return a.currentValue||a.purchasePrice||0;
+  if(a.type==='gold') return(a.qty||0)*(a.price||0);
   return(a.price||0)*(a.shares||0);
 }
 function assetTodayNative(a){
-  if(['twd_cash','usd_cash'].includes(a.type)) return 0;
+  if(['twd_cash','usd_cash','real_estate'].includes(a.type)) return 0;
   const prev=a.prevPrice!=null?a.prevPrice:(a.price||0);
   return((a.price||0)-prev)*(a.shares||a.qty||0);
 }
@@ -312,9 +416,12 @@ function assetFxPnL(a){
   return 0;
 }
 function assetCostTWD(a){
-  if(a.type==='twd_cash') return a.amt;
-  if(a.type==='usd_cash') return a.amt*fx.usd.rate;
-  return toTWD((a.cost||0)*(a.shares||a.qty||0)+(a.fee||0),(CATS[a.type]||{cur:'TWD'}).cur);
+  const cat=CATS[a.type]||{cur:'TWD'};
+  if(a.type==='twd_cash') return a.amt||0;
+  if(a.type==='usd_cash') return (a.amt||0)*fx.usd.rate;
+  if(a.type==='real_estate') return a.purchasePrice||0;
+  if(a.type==='gold') return toTWD((a.cost||0)*(a.qty||0),cat.cur);
+  return toTWD((a.cost||0)*(a.shares||a.qty||0)+(a.fee||0),cat.cur);
 }
 function assetUnrealTWD(a){return assetValTWD(a)-assetCostTWD(a);}
 function getAllFiltered(){
@@ -356,36 +463,29 @@ function renderAll(){
 }
  
 function renderTrend(all){
-  // 用買入日期和成本計算真實起始點，到今天用現值
   const today=new Date();
-  const validAssets=all.filter(a=>a.buyDate&&a.cost&&(a.shares||a.qty));
-  if(!validAssets.length){
-    if(trendChart) trendChart.destroy();
-    trendChart=null;return;
-  }
-  const earliest=new Date(Math.min(...validAssets.map(a=>new Date(a.buyDate))));
+  const validAssets=all.filter(a=>a.buyDate||(a.type==='real_estate'));
+  if(!validAssets.length){if(trendChart){trendChart.destroy();trendChart=null;}return;}
+  const dates=validAssets.filter(a=>a.buyDate).map(a=>new Date(a.buyDate));
+  const earliest=dates.length?new Date(Math.min(...dates)):new Date();
   const diffDays=Math.max(1,Math.round((today-earliest)/86400000));
   const days=chartPeriod==='1M'?Math.min(30,diffDays):chartPeriod==='1Y'?Math.min(365,diffDays):diffDays;
-  const startDate=new Date(today);startDate.setDate(startDate.getDate()-days);
   const labels=[],data=[];
   const debtTotal=includeDebt?totalDebtTWD():0;
   for(let i=days;i>=0;i--){
     const d=new Date(today);d.setDate(d.getDate()-i);
-    const dStr=d.toISOString().split('T')[0];
     labels.push((d.getMonth()+1)+'/'+d.getDate());
-    // 計算該日期的資產價值（用買入成本估算，今天用現值）
     const dayVal=all.reduce((s,a)=>{
-      if(!a.buyDate||new Date(a.buyDate)>d) return s;
-      if(i===0) return s+assetValTWD(a); // 今天用現值
-      // 其他天用買入成本估算
-      const cost=assetCostTWD(a);
-      return s+cost;
+      if(a.buyDate&&new Date(a.buyDate)>d) return s;
+      if(i===0) return s+assetValTWD(a);
+      return s+assetCostTWD(a);
     },0);
     data.push(Math.round(dayVal-debtTotal));
   }
   if(trendChart) trendChart.destroy();
   const minVal=Math.min(...data);
   const maxVal=Math.max(...data);
+  const yMin=minVal<0?minVal*1.1:minVal*0.95;
   trendChart=new Chart(document.getElementById('trend-chart').getContext('2d'),{
     type:'line',
     data:{labels,datasets:[{data,borderColor:'var(--accent)',backgroundColor:'rgba(2,132,199,0.07)',borderWidth:2,pointRadius:0,fill:true,tension:0.3}]},
@@ -393,11 +493,7 @@ function renderTrend(all){
       plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>'TWD '+i.raw.toLocaleString()}}},
       scales:{
         x:{ticks:{maxTicksLimit:6,color:'var(--text2)'},grid:{display:false},border:{display:false}},
-        y:{
-          min:minVal<0?minVal*1.1:minVal*0.9,
-          ticks:{callback:v=>{if(Math.abs(v)>=10000) return (v/10000).toFixed(0)+'萬';return v;},color:'var(--text2)',maxTicksLimit:4},
-          grid:{color:'rgba(128,128,128,0.1)'},border:{display:false}
-        }
+        y:{min:yMin,ticks:{callback:v=>{const abs=Math.abs(v);if(abs>=10000)return (v/10000).toFixed(0)+'萬';return v;},color:'var(--text2)',maxTicksLimit:4},grid:{color:'rgba(128,128,128,0.1)'},border:{display:false}}
       }
     }
   });
@@ -405,8 +501,18 @@ function renderTrend(all){
  
 function renderDonut(all,totalTWD){
   let slices=[];
-  if(dim==='detail'){slices=all.map(a=>({label:a.ticker||a.note||(CATS[a.type]||{}).label||'',value:assetValTWD(a),color:(CATS[a.type]||{}).color||'#888'}));}
-  else{Object.entries(TYPE_GROUPS).forEach(([n,g])=>{const v=all.filter(a=>g.types.includes(a.type)).reduce((s,a)=>s+assetValTWD(a),0);if(v>0)slices.push({label:n,value:v,color:g.color});});}
+  if(dim==='detail'){
+    slices=all.map(a=>({
+      label:a.ticker||a.note||a.address||(CATS[a.type]||{}).label||'',
+      value:assetValTWD(a),
+      color:(CATS[a.type]||{}).color||'#888'
+    }));
+  }else{
+    Object.entries(TYPE_GROUPS).forEach(([n,g])=>{
+      const v=all.filter(a=>g.types.includes(a.type)).reduce((s,a)=>s+assetValTWD(a),0);
+      if(v>0)slices.push({label:n,value:v,color:g.color});
+    });
+  }
   slices.sort((a,b)=>b.value-a.value);
   const total=slices.reduce((s,x)=>s+x.value,0)||1;
   document.getElementById('dc-label').textContent='總資產';
@@ -421,30 +527,33 @@ function renderDonut(all,totalTWD){
 }
  
 function renderSections(all){
-  const catKeys=Object.keys(CATS);
-  document.getElementById('asset-sections').innerHTML=catKeys.map(k=>{
+  document.getElementById('asset-sections').innerHTML=Object.keys(CATS).map(k=>{
     const items=all.map(a=>({...a,_idx:assets.indexOf(a)})).filter(a=>a.type===k);
     if(!items.length) return '';
     const cat=CATS[k];
     const catTWD=items.reduce((s,a)=>s+assetValTWD(a),0);
-    const hasFx=['us_stock','uk_stock','uk_stock_usd','usd_cash','crypto'].includes(k);
-    const isTW=['tw_stock','tw_fund'].includes(k);
+    const hasFx=['us_stock','uk_stock','uk_stock_usd','usd_cash','crypto','gold'].includes(k);
     const rows=items.map(a=>{
       const valN=assetValNative(a),valTWD=assetValTWD(a);
       const todayN=assetTodayNative(a),todayTWD=toTWD(todayN,cat.cur);
       const fxPnl=assetFxPnL(a);
-      const costN=(a.cost||0)*(a.shares||a.qty||0)+(a.fee||0);
-      const unrealN=valN-costN,unrealPct=costN?unrealN/costN*100:0;
+      const unrealTWD=assetUnrealTWD(a);
+      const costTWD=assetCostTWD(a);
+      const unrealPct=costTWD?unrealTWD/costTWD*100:0;
       const isCash=['twd_cash','usd_cash'].includes(k);
+      const isRE=k==='real_estate';
+      const isGold=k==='gold';
       const liveTag=a.priceSource==='live'?'<span class="live-dot">●</span>':'';
       const idx=a._idx;
       const ownerName=a.owner==='me'?names.me:names.wife;
-      const displayName=a.name||'';
+      const displayName=TW_NAMES[a.ticker]||a.name||a.address||'';
       const fxCell=hasFx&&Math.abs(fxPnl)>0?'<div class="'+CLS(fxPnl)+'" style="font-size:12px">'+(fxPnl>=0?'+':'')+fmtTWD(fxPnl)+'</div><div class="mini">匯率 TWD</div>':'<span style="color:var(--text3)">—</span>';
       if(isCash) return '<tr onclick="openEditModal('+idx+')">'+'<td><div class="ticker-main">'+(a.note||cat.label)+'</div><div class="ticker-sub">'+ownerName+'</div></td>'+'<td><span class="badge '+cat.badge+'">'+cat.label+'</span></td>'+'<td class="rc" style="color:var(--text3)">—</td><td class="rc" style="color:var(--text3)">—</td>'+'<td class="rc" style="color:var(--text3)">—</td><td class="rc">'+fxCell+'</td>'+'<td class="rc"><div style="font-weight:700;font-size:13px">'+fmtCur(valN,cat.cur)+'</div>'+(cat.cur!=='TWD'?'<div class="mini">'+fmtTWD(valTWD)+'</div>':'')+'</td></tr>';
-      return '<tr onclick="openEditModal('+idx+')">'+'<td><div class="ticker-main">'+(a.ticker||'—')+liveTag+'</div><div class="ticker-sub">'+(displayName&&displayName!==a.ticker?displayName:'')+(a.note?' · '+a.note:'')+'</div></td>'+'<td><span class="badge '+cat.badge+'">'+cat.label+'</span></td>'+'<td class="rc"><div style="font-size:12px">'+(a.shares||a.qty||0).toLocaleString()+'</div><div class="mini">@ '+(a.price!=null?Number(a.price).toFixed(2):'—')+'</div></td>'+'<td class="rc"><div style="font-size:12px">'+(a.cost?fmtCur(a.cost,cat.cur):'—')+'</div></td>'+'<td class="rc"><div class="'+CLS(todayN)+'" style="font-size:12px">'+(todayN!==0?(todayN>=0?'+':'')+fmtCur(todayN,cat.cur):'—')+'</div>'+(hasFx&&todayN!==0?'<div class="mini">'+(todayTWD>=0?'+':'')+fmtTWD(todayTWD)+'</div>':'')+'</td>'+'<td class="rc">'+fxCell+'</td>'+'<td class="rc"><div style="font-weight:700;font-size:12px">'+fmtCur(valN,cat.cur)+'</div>'+(cat.cur!=='TWD'?'<div class="mini">'+fmtTWD(valTWD)+'</div>':'')+'<div class="mini '+CLS(unrealN)+'">'+(unrealN!==0?(unrealN>=0?'+':'')+fmtCur(unrealN,cat.cur)+' ('+PCT(unrealPct)+')':'—')+'</div></td>'+'</tr>';
+      if(isRE) return '<tr onclick="openEditModal('+idx+')">'+'<td><div class="ticker-main">'+(a.address||'不動產')+'</div><div class="ticker-sub">'+ownerName+(a.area?' · '+a.area+'坪':'')+'</div></td>'+'<td><span class="badge">不動產</span></td>'+'<td class="rc" style="color:var(--text3)">—</td>'+'<td class="rc"><div style="font-size:12px">'+fmtTWD(a.purchasePrice||0)+'</div></td>'+'<td class="rc" style="color:var(--text3)">—</td>'+'<td class="rc" style="color:var(--text3)">—</td>'+'<td class="rc"><div style="font-weight:700;font-size:12px">'+fmtTWD(valTWD)+'</div><div class="mini '+CLS(unrealTWD)+'">'+(unrealTWD>=0?'+':'')+fmtTWD(unrealTWD)+'</div></td></tr>';
+      if(isGold) return '<tr onclick="openEditModal('+idx+')">'+'<td><div class="ticker-main">黃金'+liveTag+'</div><div class="ticker-sub">'+(a.qty||0)+' 盎司 · '+ownerName+'</div></td>'+'<td><span class="badge" style="background:#fef3c7;color:#92400e">黃金</span></td>'+'<td class="rc"><div style="font-size:12px">'+(a.qty||0)+' oz</div><div class="mini">@ '+(a.price||0).toFixed(2)+' USD</div></td>'+'<td class="rc"><div style="font-size:12px">'+(a.cost?'USD '+a.cost:'—')+'</div></td>'+'<td class="rc"><div class="'+CLS(todayN)+'" style="font-size:12px">'+(todayN!==0?(todayN>=0?'+':'')+fmtCur(todayN,cat.cur):'—')+'</div></td>'+'<td class="rc">'+fxCell+'</td>'+'<td class="rc"><div style="font-weight:700;font-size:12px">USD '+valN.toFixed(2)+'</div><div class="mini">'+fmtTWD(valTWD)+'</div><div class="mini '+CLS(unrealTWD)+'">'+(unrealTWD!==0?(unrealTWD>=0?'+':'')+fmtTWD(unrealTWD):'—')+'</div></td></tr>';
+      return '<tr onclick="openEditModal('+idx+')">'+'<td><div class="ticker-main">'+(a.ticker||'—')+liveTag+'</div><div class="ticker-sub">'+(displayName&&displayName!==a.ticker?displayName:'')+(a.note?' · '+a.note:'')+'</div></td>'+'<td><span class="badge '+cat.badge+'">'+cat.label+'</span></td>'+'<td class="rc"><div style="font-size:12px">'+(a.shares||a.qty||0).toLocaleString()+'</div><div class="mini">@ '+(a.price!=null?Number(a.price).toFixed(2):'—')+'</div></td>'+'<td class="rc"><div style="font-size:12px">'+(a.cost?fmtCur(a.cost,cat.cur):'—')+'</div></td>'+'<td class="rc"><div class="'+CLS(todayN)+'" style="font-size:12px">'+(todayN!==0?(todayN>=0?'+':'')+fmtCur(todayN,cat.cur):'—')+'</div>'+(hasFx&&todayN!==0?'<div class="mini">'+(todayTWD>=0?'+':'')+fmtTWD(todayTWD)+'</div>':'')+'</td>'+'<td class="rc">'+fxCell+'</td>'+'<td class="rc"><div style="font-weight:700;font-size:12px">'+fmtCur(valN,cat.cur)+'</div>'+(cat.cur!=='TWD'?'<div class="mini">'+fmtTWD(valTWD)+'</div>':'')+'<div class="mini '+CLS(unrealTWD)+'">'+(unrealTWD!==0?(unrealTWD>=0?'+':'')+fmtTWD(unrealTWD)+' ('+PCT(unrealPct)+')':'—')+'</div></td>'+'</tr>';
     }).join('');
-    return '<div class="cat-section"><div class="cat-header"><span class="cat-dot" style="background:'+cat.color+'"></span><span class="cat-title">'+cat.label+'</span><span class="cat-sub">'+cat.cur+'</span><span class="cat-total">'+fmtTWD(catTWD)+'</span></div>'+'<div class="card"><div style="overflow-x:auto"><table><thead><tr>'+'<th style="width:17%">標的</th><th style="width:10%">類別</th><th style="width:12%;text-align:right">股數／現價</th>'+'<th style="width:13%;text-align:right">均價（'+cat.cur+'）</th><th style="width:16%;text-align:right">今日損益（'+cat.cur+'）</th>'+'<th style="width:13%;text-align:right">匯率損益</th><th style="width:19%;text-align:right">未實現損益（'+cat.cur+'）</th>'+'</tr></thead><tbody>'+rows+'</tbody></table></div></div></div>';
+    return '<div class="cat-section"><div class="cat-header"><span class="cat-dot" style="background:'+cat.color+'"></span><span class="cat-title">'+cat.label+'</span><span class="cat-sub">'+cat.cur+'</span><span class="cat-total">'+fmtTWD(catTWD)+'</span></div>'+'<div class="card"><div style="overflow-x:auto"><table><thead><tr>'+'<th style="width:17%">標的</th><th style="width:10%">類別</th><th style="width:12%;text-align:right">股數／現價</th>'+'<th style="width:13%;text-align:right">均價／買入價</th><th style="width:16%;text-align:right">今日損益（'+cat.cur+'）</th>'+'<th style="width:13%;text-align:right">匯率損益</th><th style="width:19%;text-align:right">未實現損益</th>'+'</tr></thead><tbody>'+rows+'</tbody></table></div></div></div>';
   }).join('');
 }
  
@@ -474,29 +583,27 @@ function renderDebt(){
     const graceStr=d.graceRemain>0?'剩 '+d.graceRemain+' 月':'無';
     const cur=d.currency||'TWD';
     const ownerName=d.owner==='me'?names.me:names.wife;
-    const payDay=d.payDay||5;
+    const payDay=d.payDay||25;
     const thisMonth=today.getDate()<=payDay?
       new Date(today.getFullYear(),today.getMonth(),payDay):
       new Date(today.getFullYear(),today.getMonth()+1,payDay);
     const daysLeft=Math.ceil((thisMonth-today)/86400000);
     const isPaid=d.lastPaidMonth===today.getFullYear()+'-'+(today.getMonth()+1);
-    const reminderBtn=isPaid?
-      '<div style="margin-top:10px;padding:8px;background:var(--bg2);border-radius:var(--radius);font-size:13px;text-align:center;color:var(--text2)">✓ 本月已還款</div>':
+    const reminderDiv=isPaid?
+      '<div style="margin-top:10px;padding:8px;background:var(--bg2);border-radius:var(--radius);font-size:13px;text-align:center;color:var(--green)">✓ 本月已自動扣款</div>':
       '<div style="margin-top:10px;padding:8px;background:var(--bg2);border-radius:var(--radius);font-size:13px;text-align:center;color:var(--text2)">📅 還款日：每月 '+payDay+' 日（還有 '+daysLeft+' 天）</div>';
-    return '<div class="debt-card" onclick="openDebtEditModal('+idx+')">'+'<div class="debt-card-top">'+'<div><div class="debt-card-name">'+typeInfo.label+(d.name?' · '+d.name:'')+'</div>'+'<div class="debt-card-sub">'+ownerName+' · 每月 '+payDay+' 日'+(d.note?' · '+d.note:'')+'</div></div>'+'<div><div class="debt-card-amount">'+fmtCur(remaining,cur)+'</div><div class="debt-card-amount-sub">剩餘本金</div></div>'+'</div>'+'<div class="debt-progress-wrap">'+'<div class="debt-progress-label"><span>已還 '+paidPct+'%</span><span>剩 '+remainStr+'</span></div>'+'<div class="debt-progress-bar"><div class="debt-progress-fill" style="width:'+paidPct+'%"></div></div>'+'</div>'+'<div class="debt-detail-grid">'+'<div class="debt-detail-item"><div class="debt-detail-label">年利率</div><div class="debt-detail-val">'+(d.rate||0)+'%</div></div>'+'<div class="debt-detail-item"><div class="debt-detail-label">本月應還</div><div class="debt-detail-val">'+fmtTWD(monthlyAmt)+'</div></div>'+'<div class="debt-detail-item"><div class="debt-detail-label">寬限期</div><div class="debt-detail-val">'+graceStr+'</div></div>'+'</div>'+reminderBtn+'</div>';
+    return '<div class="debt-card" onclick="openDebtEditModal('+idx+')">'+'<div class="debt-card-top">'+'<div><div class="debt-card-name">'+typeInfo.label+(d.name?' · '+d.name:'')+'</div>'+'<div class="debt-card-sub">'+ownerName+' · 每月 '+payDay+' 日'+(d.note?' · '+d.note:'')+'</div></div>'+'<div><div class="debt-card-amount">'+fmtCur(remaining,cur)+'</div><div class="debt-card-amount-sub">剩餘本金</div></div>'+'</div>'+'<div class="debt-progress-wrap">'+'<div class="debt-progress-label"><span>已還 '+paidPct+'%</span><span>剩 '+remainStr+'</span></div>'+'<div class="debt-progress-bar"><div class="debt-progress-fill" style="width:'+paidPct+'%"></div></div>'+'</div>'+'<div class="debt-detail-grid">'+'<div class="debt-detail-item"><div class="debt-detail-label">年利率</div><div class="debt-detail-val">'+(d.rate||0)+'%</div></div>'+'<div class="debt-detail-item"><div class="debt-detail-label">本月應還</div><div class="debt-detail-val">'+fmtTWD(monthlyAmt)+'</div></div>'+'<div class="debt-detail-item"><div class="debt-detail-label">寬限期</div><div class="debt-detail-val">'+graceStr+'</div></div>'+'</div>'+reminderDiv+'</div>';
   }).join('');
 }
  
-// 自動扣除本月應還（每次載入時檢查）
 function checkAutoDeduct(){
   const today=new Date();
   const ym=today.getFullYear()+'-'+(today.getMonth()+1);
   let changed=false;
   debts.forEach(d=>{
-    if(d.lastPaidMonth===ym) return; // 本月已扣
-    const payDay=d.payDay||5;
-    if(today.getDate()<payDay) return; // 還沒到扣款日
-    // 自動扣除
+    if(d.lastPaidMonth===ym) return;
+    const payDay=d.payDay||25;
+    if(today.getDate()<payDay) return;
     const result=calcMonthlyPayment(d.remaining||0,d.rate||0,d.remainMonths||0,d.graceRemain||0,d.method||'equal');
     d.remaining=Math.max(0,(d.remaining||0)-result.principal);
     d.remainMonths=Math.max(0,(d.remainMonths||0)-1);
@@ -504,7 +611,7 @@ function checkAutoDeduct(){
     d.lastPaidMonth=ym;
     changed=true;
   });
-  if(changed){saveData();}
+  if(changed) saveData();
 }
  
 function openDebtModal(){
@@ -635,7 +742,6 @@ function deleteDebt(){
 }
  
 function renderRebal(){
-  // 先顯示帳戶選擇
   const bar=document.getElementById('rebal-profile-bar');
   if(bar){
     bar.innerHTML=['me','wife','family'].map(p=>'<button class="pbtn'+(rebalProfile===p?' active':'')+'" onclick="setRebalProfile(\''+p+'\')">'+
@@ -644,13 +750,13 @@ function renderRebal(){
   const rebalAssets=rebalProfile==='family'?
     assets.filter(a=>familyMembers[a.owner]!==false):
     assets.filter(a=>a.owner===rebalProfile);
-  const all=rebalAssets.filter(a=>!['twd_cash','usd_cash'].includes(a.type));
+  const all=rebalAssets.filter(a=>!['twd_cash','usd_cash','real_estate'].includes(a.type));
   const totalTWD=all.reduce((s,a)=>s+assetValTWD(a),0)||1;
-  // 合併同一 ticker
   const tickerMap={};
   all.forEach(a=>{
-    if(!tickerMap[a.ticker]) tickerMap[a.ticker]={ticker:a.ticker,name:a.name||a.ticker,valueTWD:0,price:a.price||0,type:a.type};
-    tickerMap[a.ticker].valueTWD+=assetValTWD(a);
+    const key=a.ticker||a.type;
+    if(!tickerMap[key]) tickerMap[key]={ticker:key,name:TW_NAMES[key]||a.name||key,valueTWD:0,price:a.price||0,type:a.type};
+    tickerMap[key].valueTWD+=assetValTWD(a);
   });
   if(!rebalRows.length){
     rebalRows=Object.values(tickerMap).map(r=>({
@@ -668,15 +774,12 @@ function renderRebal(){
   document.getElementById('rebal-rows').innerHTML=rebalRows.map((r,i)=>`<div class="rebal-row"><div style="flex:1;min-width:0"><div class="rebal-ticker">${r.ticker}</div><div class="rebal-name">${r.name!==r.ticker?r.name:''}</div></div><div class="rebal-now">${r.nowPct.toFixed(1)}%</div><i class="ti ti-arrow-right rebal-arrow"></i><div class="iuw rebal-target"><input type="number" value="${r.targetPct}" min="0" max="100" style="width:65px;text-align:center;padding:6px 8px" oninput="rebalRows[${i}].targetPct=parseFloat(this.value)||0"><span class="iunit" style="right:4px">%</span></div><button class="del-btn" onclick="rebalRemoveRow(${i})"><i class="ti ti-trash"></i></button></div>`).join('');
 }
  
-function setRebalProfile(p){
-  rebalProfile=p;rebalRows=[];renderRebal();
-}
- 
+function setRebalProfile(p){rebalProfile=p;rebalRows=[];renderRebal();}
 function rebalAddRow(){
   const ticker=document.getElementById('rebal-add-ticker').value.trim().toUpperCase();
   if(!ticker||rebalRows.find(r=>r.ticker===ticker)) return;
   const found=assets.find(a=>a.ticker===ticker);
-  rebalRows.push({ticker,name:found?.name||ticker,nowPct:0,targetPct:0,price:found?.price||0,type:found?.type||'us_stock'});
+  rebalRows.push({ticker,name:TW_NAMES[ticker]||found?.name||ticker,nowPct:0,targetPct:0,price:found?.price||0,type:found?.type||'us_stock'});
   document.getElementById('rebal-add-ticker').value='';renderRebal();
 }
 function rebalRemoveRow(i){rebalRows.splice(i,1);renderRebal();}
@@ -706,10 +809,12 @@ function calcRebal(){
 }
  
 function openAddModal(){
-  editIndex=-1;selType=null;
+  editIndex=-1;selType=null;selUKCur='USD';
   document.getElementById('modal-title-text').textContent='新增資產';
   document.getElementById('step1').style.display='block';
   document.getElementById('step2').style.display='none';
+  document.getElementById('uk-cur-selector').style.display='none';
+  document.getElementById('re-form').style.display='none';
   document.getElementById('back-btn').style.display='';
   document.getElementById('submit-btn').textContent='新增';
   document.getElementById('delete-btn').style.display='none';
@@ -725,10 +830,18 @@ function openEditModal(idx){
   document.getElementById('back-btn').style.display='none';
   document.getElementById('submit-btn').textContent='儲存';
   document.getElementById('delete-btn').style.display='';
-  const isCash=['twd_cash','usd_cash'].includes(a.type),isCrypto=a.type==='crypto';
-  document.getElementById('form-stock').style.display=(!isCash&&!isCrypto)?'block':'none';
+  const isCash=['twd_cash','usd_cash'].includes(a.type);
+  const isCrypto=a.type==='crypto';
+  const isRE=a.type==='real_estate';
+  const isGold=a.type==='gold';
+  document.getElementById('form-stock').style.display=(!isCash&&!isCrypto&&!isRE&&!isGold)?'block':'none';
   document.getElementById('form-cash').style.display=isCash?'block':'none';
   document.getElementById('form-crypto').style.display=isCrypto?'block':'none';
+  document.getElementById('re-form').style.display=isRE?'block':'none';
+  document.getElementById('form-gold').style.display=isGold?'block':'none';
+  document.getElementById('uk-cur-selector').style.display=(a.type==='uk_stock'||a.type==='uk_stock_usd')?'flex':'none';
+  if(a.type==='uk_stock_usd') setUKCur('USD');
+  else if(a.type==='uk_stock') setUKCur('GBP');
   if(isCash){
     document.getElementById('cash-lbl').textContent='金額（'+(CATS[a.type]||{cur:'TWD'}).cur+'）';
     document.getElementById('f-cash-amt').value=a.amt||'';
@@ -743,9 +856,25 @@ function openEditModal(idx){
     document.getElementById('f-cry-owner').value=a.owner||'me';
     document.getElementById('f-cry-note').value=a.note||'';
     document.getElementById('cry-price-status').textContent='';
+  }else if(isRE){
+    document.getElementById('f-re-address').value=a.address||'';
+    document.getElementById('f-re-area').value=a.area||'';
+    document.getElementById('f-re-purchase').value=a.purchasePrice||'';
+    document.getElementById('f-re-current').value=a.currentValue||'';
+    document.getElementById('f-re-date').value=a.buyDate||'';
+    document.getElementById('f-re-owner').value=a.owner||'me';
+    document.getElementById('f-re-note').value=a.note||'';
+  }else if(isGold){
+    document.getElementById('f-gold-qty').value=a.qty||'';
+    document.getElementById('f-gold-cost').value=a.cost||'';
+    document.getElementById('f-gold-price').value=a.price!=null?Number(a.price).toFixed(2):'';
+    document.getElementById('f-gold-date').value=a.buyDate||'';
+    document.getElementById('f-gold-owner').value=a.owner||'me';
+    document.getElementById('f-gold-note').value=a.note||'';
+    document.getElementById('gold-price-status').textContent='';
   }else{
     document.getElementById('f-ticker').value=a.ticker||'';
-    document.getElementById('f-name').value=a.name||'';
+    document.getElementById('f-name').value=TW_NAMES[a.ticker]||a.name||'';
     document.getElementById('f-shares').value=a.shares||'';
     document.getElementById('f-cost').value=a.cost||'';
     document.getElementById('f-price').value=a.price!=null?Number(a.price).toFixed(2):'';
@@ -761,28 +890,62 @@ function openEditModal(idx){
   }
   document.getElementById('modal-overlay').style.display='flex';
 }
-function closeModal(){document.getElementById('modal-overlay').style.display='none';hideAC();document.getElementById('ac-crypto-dd').style.display='none';}
+function closeModal(){
+  document.getElementById('modal-overlay').style.display='none';
+  hideAC();
+  document.getElementById('ac-crypto-dd').style.display='none';
+}
 function overlayClick(e){if(e.target===document.getElementById('modal-overlay'))closeModal();}
-function goStep1(){document.getElementById('step1').style.display='block';document.getElementById('step2').style.display='none';document.querySelectorAll('.type-btn').forEach(b=>b.classList.remove('selected'));}
+function goStep1(){
+  document.getElementById('step1').style.display='block';
+  document.getElementById('step2').style.display='none';
+  document.getElementById('uk-cur-selector').style.display='none';
+  document.getElementById('re-form').style.display='none';
+  document.querySelectorAll('.type-btn').forEach(b=>b.classList.remove('selected'));
+}
 function pickType(t){
   selType=t;
   document.querySelectorAll('.type-btn').forEach(b=>b.classList.remove('selected'));
-  document.getElementById('t-'+t).classList.add('selected');
+  const btn=document.getElementById('t-'+t);
+  if(btn) btn.classList.add('selected');
   document.getElementById('step1').style.display='none';
   document.getElementById('step2').style.display='block';
-  const isCash=['twd_cash','usd_cash'].includes(t),isCrypto=t==='crypto';
-  document.getElementById('form-stock').style.display=(!isCash&&!isCrypto)?'block':'none';
+  const isCash=['twd_cash','usd_cash'].includes(t);
+  const isCrypto=t==='crypto';
+  const isRE=t==='real_estate';
+  const isGold=t==='gold';
+  const isUK=t==='uk_stock';
+  document.getElementById('form-stock').style.display=(!isCash&&!isCrypto&&!isRE&&!isGold)?'block':'none';
   document.getElementById('form-cash').style.display=isCash?'block':'none';
   document.getElementById('form-crypto').style.display=isCrypto?'block':'none';
+  document.getElementById('re-form').style.display=isRE?'block':'none';
+  document.getElementById('form-gold').style.display=isGold?'block':'none';
+  // 英股顯示幣別選擇器
+  const ukSel=document.getElementById('uk-cur-selector');
+  ukSel.style.display=isUK?'flex':'none';
+  if(isUK){setUKCur('USD');} // 預設 USD
   const cat=CATS[t];
   if(cat){document.getElementById('funit').textContent=cat.cur;document.getElementById('cash-lbl').textContent='金額（'+cat.cur+'）';}
   ['f-ticker','f-name','f-shares','f-cost','f-note','f-cash-note','f-cry-note'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  document.getElementById('f-price').value='';document.getElementById('f-cry-price').value='';
-  document.getElementById('price-status').textContent='';document.getElementById('cry-price-status').textContent='';
+  document.getElementById('f-price').value='';
+  document.getElementById('f-cry-price').value='';
+  document.getElementById('price-status').textContent='';
+  document.getElementById('cry-price-status').textContent='';
   document.getElementById('ac-dropdown').style.display='none';
   if(!document.getElementById('f-date').value) document.getElementById('f-date').value=todayStr();
   if(!document.getElementById('f-cry-date').value) document.getElementById('f-cry-date').value=todayStr();
   updateFeeUI();
+}
+async function fetchGoldPrice(){
+  const statusEl=document.getElementById('gold-price-status');
+  const priceEl=document.getElementById('f-gold-price');
+  statusEl.textContent='查詢即時金價…';statusEl.className='price-status price-loading';
+  try{
+    const q=await proxyQuote('GC=F');
+    priceEl.value=q.price.toFixed(2);
+    priceEl.dataset.prevClose=q.prevClose;
+    statusEl.textContent='✓ 即時金價 (USD/盎司)';statusEl.className='price-status price-ok';
+  }catch{statusEl.textContent='查詢失敗，請手動輸入';statusEl.className='price-status price-err';}
 }
 function updateFeeUI(){
   const t=document.getElementById('f-fee-type').value;
@@ -805,7 +968,10 @@ function calcFee(){
   else el.textContent='買入總額 '+c+' '+Math.round(p).toLocaleString()+' + 手續費 '+c+' '+manual+' → 總費用 '+c+' '+(p+manual).toFixed(2);
 }
 function submitAsset(){
-  const isCash=['twd_cash','usd_cash'].includes(selType),isCrypto=selType==='crypto';
+  const isCash=['twd_cash','usd_cash'].includes(selType);
+  const isCrypto=selType==='crypto';
+  const isRE=selType==='real_estate';
+  const isGold=selType==='gold';
   const today=todayStr();let obj;
   if(isCash){
     const amt=parseFloat(document.getElementById('f-cash-amt').value)||0;if(!amt)return;
@@ -818,9 +984,21 @@ function submitAsset(){
     const prevPrice=parseFloat(document.getElementById('f-cry-price').dataset.prevClose)||price;
     if(!ticker||!qty)return;
     obj={type:'crypto',ticker,qty,cost,price,prevPrice,owner:document.getElementById('f-cry-owner').value,buyDate:document.getElementById('f-cry-date').value||today,note:document.getElementById('f-cry-note').value,priceSource:price?'live':''};
+  }else if(isRE){
+    const address=document.getElementById('f-re-address').value.trim();
+    const purchasePrice=parseFloat(document.getElementById('f-re-purchase').value)||0;
+    if(!address||!purchasePrice)return;
+    obj={type:'real_estate',address,area:parseFloat(document.getElementById('f-re-area').value)||0,purchasePrice,currentValue:parseFloat(document.getElementById('f-re-current').value)||purchasePrice,buyDate:document.getElementById('f-re-date').value||today,owner:document.getElementById('f-re-owner').value,note:document.getElementById('f-re-note').value};
+  }else if(isGold){
+    const qty=parseFloat(document.getElementById('f-gold-qty').value)||0;
+    const cost=parseFloat(document.getElementById('f-gold-cost').value)||0;
+    const price=parseFloat(document.getElementById('f-gold-price').value)||0;
+    const prevPrice=parseFloat(document.getElementById('f-gold-price').dataset.prevClose)||price;
+    if(!qty)return;
+    obj={type:'gold',qty,cost,price,prevPrice,owner:document.getElementById('f-gold-owner').value,buyDate:document.getElementById('f-gold-date').value||today,note:document.getElementById('f-gold-note').value,priceSource:price?'live':''};
   }else{
     const ticker=document.getElementById('f-ticker').value.trim().toUpperCase();
-    const name=document.getElementById('f-name').value.trim()||ticker;
+    const name=document.getElementById('f-name').value.trim()||TW_NAMES[ticker]||ticker;
     const shares=parseFloat(document.getElementById('f-shares').value)||0;
     const cost=parseFloat(document.getElementById('f-cost').value)||0;
     const price=parseFloat(document.getElementById('f-price').value)||0;
