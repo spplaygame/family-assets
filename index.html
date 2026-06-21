@@ -82,9 +82,12 @@
   <div id="asset-sections"></div>
 </div>
 
+<!-- 再平衡頁 -->
 <div class="page" id="page-rebal">
   <div class="rebal-section">
-    <div class="rebal-title">目前配置 <span style="font-size:11px;font-weight:400;color:var(--text2)">（自動從持倉帶入）</span></div>
+    <div class="rebal-title">選擇帳戶</div>
+    <div id="rebal-profile-bar" class="period-bar" style="margin-bottom:1rem"></div>
+    <div class="rebal-title">目前配置 <span style="font-size:11px;font-weight:400;color:var(--text2)">（同標的自動合併）</span></div>
     <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);font-weight:500">
       <span>標的</span><span style="text-align:right">現在佔比</span><span style="text-align:center;width:70px">目標%</span><span></span>
     </div>
@@ -107,6 +110,7 @@
   </div>
 </div>
 
+<!-- 債務頁 -->
 <div class="page" id="page-debt">
   <div id="debt-has-content" style="display:none">
     <div class="debt-summary-card">
@@ -147,6 +151,7 @@
   <button class="debt-fab" onclick="openDebtModal()"><i class="ti ti-plus"></i></button>
 </div>
 
+<!-- 設定頁 -->
 <div class="page" id="page-settings">
   <div class="settings-section">
     <div class="settings-title">主題</div>
@@ -211,6 +216,7 @@
   </div>
 </div>
 
+<!-- 底部導航 -->
 <nav class="bottom-nav">
   <button class="nav-btn active" onclick="switchPage('home')" id="nav-home">
     <i class="ti ti-home"></i>首頁
@@ -226,6 +232,7 @@
   </button>
 </nav>
 
+<!-- 資產 Modal -->
 <div id="modal-overlay" class="modal-overlay" style="display:none" onclick="overlayClick(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-title">
@@ -235,8 +242,9 @@
     <div id="step1">
       <div class="type-grid">
         <button class="type-btn" onclick="pickType('tw_stock')" id="t-tw_stock"><span class="type-icon"><i class="ti ti-building-bank"></i></span>台股</button>
-        <button class="type-btn" onclick="pickType('us_stock')" id="t-us_stock"><span class="type-icon"><i class="ti ti-chart-candle"></i></span>美股</button>
-        <button class="type-btn" onclick="pickType('uk_stock')" id="t-uk_stock"><span class="type-icon"><i class="ti ti-chart-candle"></i></span>英股</button>
+        <button class="type-btn" onclick="pickType('us_stock')" id="t-us_stock"><span class="type-icon"><i class="ti ti-chart-candle"></i></span>美股<span style="font-size:9px;color:var(--text2)">USD</span></button>
+        <button class="type-btn" onclick="pickType('uk_stock')" id="t-uk_stock"><span class="type-icon"><i class="ti ti-chart-candle"></i></span>英股<span style="font-size:9px;color:var(--text2)">GBP</span></button>
+        <button class="type-btn" onclick="pickType('uk_stock_usd')" id="t-uk_stock_usd"><span class="type-icon"><i class="ti ti-chart-candle"></i></span>英股<span style="font-size:9px;color:var(--text2)">USD</span></button>
         <button class="type-btn" onclick="pickType('tw_fund')" id="t-tw_fund"><span class="type-icon"><i class="ti ti-receipt"></i></span>台灣基金</button>
         <button class="type-btn" onclick="pickType('twd_cash')" id="t-twd_cash"><span class="type-icon"><i class="ti ti-cash"></i></span>台幣現金</button>
         <button class="type-btn" onclick="pickType('usd_cash')" id="t-usd_cash"><span class="type-icon"><i class="ti ti-cash"></i></span>美元現金</button>
@@ -247,7 +255,7 @@
     <div id="step2" style="display:none">
       <div id="form-stock">
         <div class="frow">
-          <div><label>代碼</label><div class="ac-wrap"><input id="f-ticker" type="text" placeholder="輸入代碼或關鍵字" oninput="onTickerInput()" autocomplete="off"><div id="ac-dropdown" class="ac-dropdown" style="display:none"></div></div></div>
+          <div><label>代碼或關鍵字</label><div class="ac-wrap"><input id="f-ticker" type="text" placeholder="輸入代碼或中文搜尋" oninput="onTickerInput()" autocomplete="off"><div id="ac-dropdown" class="ac-dropdown" style="display:none"></div></div></div>
           <div><label>名稱</label><input id="f-name" type="text" placeholder="自動帶入"></div>
         </div>
         <div class="frow3">
@@ -302,6 +310,7 @@
   </div>
 </div>
 
+<!-- 債務 Modal -->
 <div id="debt-modal-overlay" class="modal-overlay" style="display:none" onclick="debtOverlayClick(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-title">
@@ -324,7 +333,7 @@
       </select></div>
     </div>
     <div class="frow">
-      <div><label>名稱</label><input id="d-name" type="text" placeholder="如：國泰房貸"></div>
+      <div><label>名稱</label><input id="d-name" type="text" placeholder="如：彰化銀行房貸"></div>
       <div><label>歸屬</label><select id="d-owner"><option value="me">我</option><option value="wife">太太</option></select></div>
     </div>
     <div class="sec-div">
@@ -343,11 +352,7 @@
           <div><label>寬限期（月）</label><input id="d-grace" type="number" placeholder="如：12（無則留空）" oninput="calcDebtPayment()"></div>
         </div>
         <div class="frow">
-          <div><label>每月扣款日</label><select id="d-pay-day">
-            <option value="1">每月 1 日</option><option value="5">每月 5 日</option>
-            <option value="10">每月 10 日</option><option value="15">每月 15 日</option>
-            <option value="20">每月 20 日</option><option value="25">每月 25 日</option>
-          </select></div>
+          <div><label>每月扣款日（1-28）</label><input id="d-pay-day-input" type="number" min="1" max="28" placeholder="如：25" oninput="calcDebtPayment()"></div>
           <div><label>還款方式</label><select id="d-method">
             <option value="equal">本息平均攤還</option>
             <option value="principal">本金平均攤還</option>
@@ -364,11 +369,7 @@
           <div><label>寬限期剩餘（月）</label><input id="d-grace-mid" type="number" placeholder="如：8（無則留空）" oninput="calcDebtPayment()"></div>
         </div>
         <div class="frow">
-          <div><label>每月扣款日</label><select id="d-pay-day-mid">
-            <option value="1">每月 1 日</option><option value="5">每月 5 日</option>
-            <option value="10">每月 10 日</option><option value="15">每月 15 日</option>
-            <option value="20">每月 20 日</option><option value="25">每月 25 日</option>
-          </select></div>
+          <div><label>每月扣款日（1-28）</label><input id="d-pay-day-mid-input" type="number" min="1" max="28" placeholder="如：25" oninput="calcDebtPayment()"></div>
           <div><label>還款方式</label><select id="d-method-mid">
             <option value="equal">本息平均攤還</option>
             <option value="principal">本金平均攤還</option>
