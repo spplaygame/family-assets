@@ -66,7 +66,21 @@ export default async function handler(req, res) {
       res.json(result);
 
     } else if (type === 'fund_search') {
-      // 使用 fundclear.com.tw 官方 API（POST）
+      // 先取得 Cookie
+      let cookie = '';
+      try {
+        const init = await fetch('https://www.fundclear.com.tw/fund-search', {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          }
+        });
+        const setCookie = init.headers.get('set-cookie');
+        if (setCookie) {
+          cookie = setCookie.split(',').map(c => c.trim().split(';')[0]).join('; ');
+        }
+      } catch(e) { console.warn('cookie fetch failed', e.message); }
+
       const r = await fetch('https://www.fundclear.com.tw/api/search/fund/query-fund', {
         method: 'POST',
         headers: {
@@ -74,13 +88,9 @@ export default async function handler(req, res) {
           'Accept': 'application/json, text/plain, */*',
           'Accept-Language': 'zh-TW,zh;q=0.9',
           'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Referer': 'https://www.fundclear.com.tw/fundclearWeb/BFZ1/BFZ110.xhtml',
+          'Referer': 'https://www.fundclear.com.tw/fund-search',
           'Origin': 'https://www.fundclear.com.tw',
-          'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120"',
-          'sec-ch-ua-mobile': '?0',
-          'sec-fetch-dest': 'empty',
-          'sec-fetch-mode': 'cors',
-          'sec-fetch-site': 'same-origin',
+          'Cookie': cookie,
         },
         body: JSON.stringify({
           searchKey: q || '',
@@ -109,16 +119,24 @@ export default async function handler(req, res) {
       });
 
     } else if (type === 'fund_nav') {
-      // 查單一基金最新淨值
+      let cookie = '';
+      try {
+        const init = await fetch('https://www.fundclear.com.tw/fund-search', {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' }
+        });
+        const setCookie = init.headers.get('set-cookie');
+        if (setCookie) cookie = setCookie.split(',').map(c => c.trim().split(';')[0]).join('; ');
+      } catch {}
+
       const r = await fetch('https://www.fundclear.com.tw/api/search/fund/query-fund', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/plain, */*',
-          'Accept-Language': 'zh-TW,zh;q=0.9',
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Referer': 'https://www.fundclear.com.tw/fundclearWeb/BFZ1/BFZ110.xhtml',
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+          'Referer': 'https://www.fundclear.com.tw/fund-search',
           'Origin': 'https://www.fundclear.com.tw',
+          'Cookie': cookie,
         },
         body: JSON.stringify({
           searchKey: symbol || '',
