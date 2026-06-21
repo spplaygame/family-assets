@@ -18,9 +18,7 @@
     <button class="profile-btn" onclick="setProfile('wife')" id="pb-wife">
       <span id="lbl-wife">太太的資產</span>
     </button>
-    <button class="profile-btn" onclick="setProfile('family')" id="pb-family">
-      總資產
-    </button>
+    <button class="profile-btn" onclick="setProfile('family')" id="pb-family">總資產</button>
   </div>
 
   <div class="rate-bar">
@@ -125,18 +123,9 @@
         </div>
       </div>
       <div class="debt-summary-meta">
-        <div class="debt-meta-item">
-          <div class="debt-meta-label">負債筆數</div>
-          <div class="debt-meta-val" id="debt-count-display">0 筆</div>
-        </div>
-        <div class="debt-meta-item">
-          <div class="debt-meta-label">平均年利率</div>
-          <div class="debt-meta-val" id="debt-rate-display">—</div>
-        </div>
-        <div class="debt-meta-item">
-          <div class="debt-meta-label">首頁計入</div>
-          <div class="debt-meta-val" id="debt-include-display" onclick="toggleDebtInclusion()" style="cursor:pointer;color:var(--accent)">是</div>
-        </div>
+        <div class="debt-meta-item"><div class="debt-meta-label">負債筆數</div><div class="debt-meta-val" id="debt-count-display">0 筆</div></div>
+        <div class="debt-meta-item"><div class="debt-meta-label">平均年利率</div><div class="debt-meta-val" id="debt-rate-display">—</div></div>
+        <div class="debt-meta-item"><div class="debt-meta-label">首頁計入</div><div class="debt-meta-val" id="debt-include-display" onclick="toggleDebtInclusion()" style="cursor:pointer;color:var(--accent)">是</div></div>
       </div>
     </div>
     <div id="debt-list"></div>
@@ -182,24 +171,18 @@
       </div>
     </div>
   </div>
-
   <div class="settings-section">
     <div class="settings-title">總資產帳戶選擇</div>
     <div style="font-size:12px;color:var(--text2);margin-bottom:10px">選擇哪些帳戶納入「總資產」計算</div>
     <div class="settings-row">
       <div class="settings-label" id="family-check-me-label">我的資產</div>
-      <div class="toggle-switch on" id="family-toggle-me" onclick="toggleFamilyMember('me')">
-        <div class="toggle-dot"></div>
-      </div>
+      <div class="toggle-switch on" id="family-toggle-me" onclick="toggleFamilyMember('me')"><div class="toggle-dot"></div></div>
     </div>
     <div class="settings-row">
       <div class="settings-label" id="family-check-wife-label">太太的資產</div>
-      <div class="toggle-switch on" id="family-toggle-wife" onclick="toggleFamilyMember('wife')">
-        <div class="toggle-dot"></div>
-      </div>
+      <div class="toggle-switch on" id="family-toggle-wife" onclick="toggleFamilyMember('wife')"><div class="toggle-dot"></div></div>
     </div>
   </div>
-
   <div class="settings-section">
     <div class="settings-title">帳戶名稱</div>
     <div class="settings-row">
@@ -218,18 +201,10 @@
 
 <!-- 底部導航 -->
 <nav class="bottom-nav">
-  <button class="nav-btn active" onclick="switchPage('home')" id="nav-home">
-    <i class="ti ti-home"></i>首頁
-  </button>
-  <button class="nav-btn" onclick="switchPage('rebal')" id="nav-rebal">
-    <i class="ti ti-scale"></i>再平衡
-  </button>
-  <button class="nav-btn" onclick="switchPage('debt')" id="nav-debt">
-    <i class="ti ti-credit-card"></i>債務
-  </button>
-  <button class="nav-btn" onclick="switchPage('settings')" id="nav-settings">
-    <i class="ti ti-settings"></i>設定
-  </button>
+  <button class="nav-btn active" onclick="switchPage('home')" id="nav-home"><i class="ti ti-home"></i>首頁</button>
+  <button class="nav-btn" onclick="switchPage('rebal')" id="nav-rebal"><i class="ti ti-scale"></i>再平衡</button>
+  <button class="nav-btn" onclick="switchPage('debt')" id="nav-debt"><i class="ti ti-credit-card"></i>債務</button>
+  <button class="nav-btn" onclick="switchPage('settings')" id="nav-settings"><i class="ti ti-settings"></i>設定</button>
 </nav>
 
 <!-- 資產 Modal -->
@@ -242,20 +217,30 @@
     <div id="step1">
       <div class="type-grid">
         <button class="type-btn" onclick="pickType('tw_stock')" id="t-tw_stock"><span class="type-icon"><i class="ti ti-building-bank"></i></span>台股</button>
-        <button class="type-btn" onclick="pickType('us_stock')" id="t-us_stock"><span class="type-icon"><i class="ti ti-chart-candle"></i></span>美股<span style="font-size:9px;color:var(--text2)">USD</span></button>
-        <button class="type-btn" onclick="pickType('uk_stock')" id="t-uk_stock"><span class="type-icon"><i class="ti ti-chart-candle"></i></span>英股<span style="font-size:9px;color:var(--text2)">GBP</span></button>
-        <button class="type-btn" onclick="pickType('uk_stock_usd')" id="t-uk_stock_usd"><span class="type-icon"><i class="ti ti-chart-candle"></i></span>英股<span style="font-size:9px;color:var(--text2)">USD</span></button>
+        <button class="type-btn" onclick="pickType('us_stock')" id="t-us_stock"><span class="type-icon"><i class="ti ti-chart-candle"></i></span>美股</button>
+        <button class="type-btn" onclick="pickType('uk_stock')" id="t-uk_stock"><span class="type-icon"><i class="ti ti-chart-candle"></i></span>英股</button>
         <button class="type-btn" onclick="pickType('tw_fund')" id="t-tw_fund"><span class="type-icon"><i class="ti ti-receipt"></i></span>台灣基金</button>
         <button class="type-btn" onclick="pickType('twd_cash')" id="t-twd_cash"><span class="type-icon"><i class="ti ti-cash"></i></span>台幣現金</button>
         <button class="type-btn" onclick="pickType('usd_cash')" id="t-usd_cash"><span class="type-icon"><i class="ti ti-cash"></i></span>美元現金</button>
         <button class="type-btn" onclick="pickType('crypto')" id="t-crypto"><span class="type-icon"><i class="ti ti-currency-bitcoin"></i></span>加密貨幣</button>
+        <button class="type-btn" onclick="pickType('real_estate')" id="t-real_estate"><span class="type-icon"><i class="ti ti-home"></i></span>不動產</button>
+        <button class="type-btn" onclick="pickType('gold')" id="t-gold"><span class="type-icon"><i class="ti ti-crown"></i></span>黃金</button>
       </div>
       <div class="btn-row"><button class="btn-secondary" onclick="closeModal()">取消</button></div>
     </div>
     <div id="step2" style="display:none">
+
+      <!-- 英股幣別選擇器 -->
+      <div id="uk-cur-selector" style="display:none;align-items:center;gap:8px;margin-bottom:12px;padding:10px;background:var(--bg2);border-radius:var(--radius);">
+        <span style="font-size:13px;color:var(--text2)">計價幣別：</span>
+        <button id="uk-cur-usd" class="pbtn active" onclick="setUKCur('USD')">USD 美元</button>
+        <button id="uk-cur-gbp" class="pbtn" onclick="setUKCur('GBP')">GBP 英鎊</button>
+      </div>
+
+      <!-- 股票表單 -->
       <div id="form-stock">
         <div class="frow">
-          <div><label>代碼或關鍵字</label><div class="ac-wrap"><input id="f-ticker" type="text" placeholder="輸入代碼或中文搜尋" oninput="onTickerInput()" autocomplete="off"><div id="ac-dropdown" class="ac-dropdown" style="display:none"></div></div></div>
+          <div><label>代碼或關鍵字</label><div class="ac-wrap"><input id="f-ticker" type="text" placeholder="輸入代碼搜尋" oninput="onTickerInput()" autocomplete="off"><div id="ac-dropdown" class="ac-dropdown" style="display:none"></div></div></div>
           <div><label>名稱</label><input id="f-name" type="text" placeholder="自動帶入"></div>
         </div>
         <div class="frow3">
@@ -278,6 +263,8 @@
           <div class="fee-preview" id="fee-preview">請先輸入股數與買入成本</div>
         </div>
       </div>
+
+      <!-- 現金表單 -->
       <div id="form-cash" style="display:none">
         <div class="frow">
           <div><label id="cash-lbl">金額（TWD）</label><input id="f-cash-amt" type="number" placeholder="500000"></div>
@@ -285,6 +272,8 @@
         </div>
         <div><label>備註</label><textarea id="f-cash-note" rows="2" placeholder="活存、定存…"></textarea></div>
       </div>
+
+      <!-- 加密貨幣表單 -->
       <div id="form-crypto" style="display:none">
         <div class="frow">
           <div><label>幣種</label><div class="ac-wrap"><input id="f-cry-ticker" type="text" placeholder="BTC / ETH / SOL" oninput="onCryptoInput()" autocomplete="off"><div id="ac-crypto-dd" class="ac-dropdown" style="display:none"></div></div></div>
@@ -300,6 +289,41 @@
         </div>
         <div><label>備註</label><textarea id="f-cry-note" rows="2" placeholder="選填…"></textarea></div>
       </div>
+
+      <!-- 不動產表單 -->
+      <div id="re-form" style="display:none">
+        <div><label>地址</label><input id="f-re-address" type="text" placeholder="如：台北市信義區XX路XX號"></div>
+        <div class="frow" style="margin-top:10px">
+          <div><label>坪數</label><input id="f-re-area" type="number" step="0.1" placeholder="如：32.5"></div>
+          <div><label>買入價格（TWD）</label><input id="f-re-purchase" type="number" placeholder="如：15000000"></div>
+        </div>
+        <div class="frow">
+          <div><label>目前估值（TWD）</label><input id="f-re-current" type="number" placeholder="如：18000000（留空同買入價）"></div>
+          <div><label>買入日期</label><input id="f-re-date" type="date"></div>
+        </div>
+        <div class="frow">
+          <div><label>歸屬</label><select id="f-re-owner"><option value="me">我</option><option value="wife">太太</option></select></div>
+          <div><label>備註</label><input id="f-re-note" type="text" placeholder="選填…"></div>
+        </div>
+      </div>
+
+      <!-- 黃金表單 -->
+      <div id="form-gold" style="display:none">
+        <div class="frow">
+          <div><label>持有量（盎司 oz）</label><input id="f-gold-qty" type="number" step="0.001" placeholder="如：1.5"></div>
+          <div><label>買入成本（USD/盎司）</label><input id="f-gold-cost" type="number" placeholder="如：1900"></div>
+        </div>
+        <div class="frow">
+          <div><label>現價（USD/盎司）</label><input id="f-gold-price" type="number" placeholder="查詢中…"><div class="price-status" id="gold-price-status"></div></div>
+          <div style="display:flex;align-items:flex-end"><button class="btn-secondary" onclick="fetchGoldPrice()" style="width:100%"><i class="ti ti-refresh"></i> 抓即時金價</button></div>
+        </div>
+        <div class="frow">
+          <div><label>買入日期</label><input id="f-gold-date" type="date"></div>
+          <div><label>歸屬</label><select id="f-gold-owner"><option value="me">我</option><option value="wife">太太</option></select></div>
+        </div>
+        <div><label>備註</label><textarea id="f-gold-note" rows="2" placeholder="選填…"></textarea></div>
+      </div>
+
       <div class="btn-row">
         <button class="btn-primary" id="submit-btn" onclick="submitAsset()">新增</button>
         <button class="btn-secondary" id="back-btn" onclick="goStep1()">返回</button>
