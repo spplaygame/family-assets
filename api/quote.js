@@ -71,9 +71,16 @@ export default async function handler(req, res) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0',
-          'Referer': 'https://www.fundclear.com.tw/',
+          'Accept': 'application/json, text/plain, */*',
+          'Accept-Language': 'zh-TW,zh;q=0.9',
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://www.fundclear.com.tw/fundclearWeb/BFZ1/BFZ110.xhtml',
           'Origin': 'https://www.fundclear.com.tw',
+          'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120"',
+          'sec-ch-ua-mobile': '?0',
+          'sec-fetch-dest': 'empty',
+          'sec-fetch-mode': 'cors',
+          'sec-fetch-site': 'same-origin',
         },
         body: JSON.stringify({
           searchKey: q || '',
@@ -107,8 +114,10 @@ export default async function handler(req, res) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0',
-          'Referer': 'https://www.fundclear.com.tw/',
+          'Accept': 'application/json, text/plain, */*',
+          'Accept-Language': 'zh-TW,zh;q=0.9',
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://www.fundclear.com.tw/fundclearWeb/BFZ1/BFZ110.xhtml',
           'Origin': 'https://www.fundclear.com.tw',
         },
         body: JSON.stringify({
