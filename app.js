@@ -487,8 +487,8 @@ function renderSections(all) {
       const groupVal   = g.items.reduce((s,a)=>s+assetValTWD(a),0);
       const groupToday = g.items.reduce((s,a)=>s+assetTodayNative(a),0);
       const groupFx    = g.items.reduce((s,a)=>s+assetFxPnL(a),0);
-      const groupUnreal= g.items.reduce((s,a)=>s+assetValTWD(a)-assetCostTWD(a),0);
-      const groupCost  = g.items.reduce((s,a)=>s+assetCostTWD(a),0);
+      const groupUnreal= g.items.reduce((s,a)=>s+assetValNative(a)-(a.cost||0)*(a.shares||a.qty||0),0);
+      const groupCost  = g.items.reduce((s,a)=>s+(a.cost||0)*(a.shares||a.qty||0),0);
       const unrealPct  = groupCost ? groupUnreal/groupCost*100 : 0;
       const totalShares= g.items.reduce((s,a)=>s+(a.shares||a.qty||0),0);
       const avgCost    = totalShares>0 ? g.items.reduce((s,a)=>s+(a.cost||0)*(a.shares||a.qty||0),0)/totalShares : 0;
@@ -563,12 +563,13 @@ function openGroupDetail(key) {
   const title = document.getElementById('detail-modal-title');
   const body  = document.getElementById('detail-modal-body');
   title.textContent = (group.name||group.ticker||cat.label) + ' 明細';
-  body.innerHTML = group.items.map(a => {
+  const sortedItems = [...group.items].sort((a,b)=>(a.buyDate||'').localeCompare(b.buyDate||''));
+  body.innerHTML = sortedItems.map(a => {
     const idx = a._idx;
-    const valN = assetValNative(a);
     const isCash = ['twd_cash','usd_cash'].includes(a.type);
     const isRE   = a.type==='real_estate';
     const isGold = a.type==='gold';
+    const costTotal = fmtCur((a.cost||0)*(a.shares||a.qty||0)+(a.fee||0), cat.cur);
     if(isCash) return '<div class="detail-row" onclick="openEditModal('+idx+')">'
       +'<div><div class="detail-main">'+(a.note||cat.label)+'</div>'
       +'<div class="detail-sub">'+(a.owner==='me'?names.me:names.wife)+'</div></div>'
@@ -580,8 +581,7 @@ function openGroupDetail(key) {
     return '<div class="detail-row" onclick="openEditModal('+idx+')">'
       +'<div><div class="detail-main">'+(isGold?(a.qty||0)+' oz':'股數 '+(a.shares||a.qty||0))+'</div>'
       +'<div class="detail-sub">均價 '+fmtCur(a.cost||0,cat.cur)+(a.buyDate?' · '+a.buyDate:'')+'</div></div>'
-      +'<div><div class="detail-val">'+fmtCur(valN,cat.cur)+'</div>'
-      +(cat.cur!=='TWD'?'<div class="detail-sub">'+fmtTWD(assetValTWD(a))+'</div>':'')+'</div></div>';
+      +'<div class="detail-val">'+costTotal+'</div></div>';
   }).join('');
 
   // 新增按鈕
