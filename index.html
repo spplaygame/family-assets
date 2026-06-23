@@ -436,6 +436,51 @@
 .detail-val{font-weight:700;font-size:14px;color:var(--text);text-align:right}
 </style>
 
+<!-- 配息 Modal -->
+<div id="dividend-modal-overlay" class="modal-overlay" style="display:none" onclick="divOverlayClick(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">
+      <span>新增配息</span>
+      <button class="close-btn" onclick="closeDividendModal()"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="frow">
+      <div><label>日期</label><input id="div-date" type="date"></div>
+      <div><label>配息金額</label><input id="div-amount" type="number" step="0.01" min="0" placeholder="0"></div>
+    </div>
+    <div style="margin-bottom:12px">
+      <label>幣別</label>
+      <select id="div-currency" style="width:100%">
+        <option value="TWD">TWD 台幣</option>
+        <option value="USD">USD 美元</option>
+        <option value="GBP">GBP 英鎊</option>
+      </select>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="margin-bottom:6px;display:block">去向</label>
+      <div class="seg-ctrl">
+        <div class="seg-btn active" id="div-dest-cash" onclick="setDivDest('cash')">存入現金帳戶</div>
+        <div class="seg-btn" id="div-dest-reinvest" onclick="setDivDest('reinvest')">再投入標的</div>
+      </div>
+    </div>
+    <div id="div-cash-section">
+      <label>存入帳戶</label>
+      <select id="div-cash-account" style="width:100%"></select>
+    </div>
+    <div id="div-reinvest-section" style="display:none">
+      <div><label>買入標的</label><select id="div-target-asset" style="width:100%"></select></div>
+      <div class="frow" style="margin-top:10px">
+        <div><label>買入股數／單位</label><input id="div-shares" type="number" step="any" min="0" placeholder="0"></div>
+        <div><label>買入價格</label><input id="div-price" type="number" step="any" min="0" placeholder="0"></div>
+      </div>
+      <div style="margin-top:10px"><label>手續費</label><input id="div-fee" type="number" step="0.01" min="0" placeholder="0" style="width:100%"></div>
+    </div>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn-primary" onclick="submitDividend()">確認</button>
+      <button class="btn-secondary" onclick="closeDividendModal()">取消</button>
+    </div>
+  </div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>

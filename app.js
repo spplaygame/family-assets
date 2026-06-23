@@ -63,6 +63,8 @@ let includeDebt = true, debtMode = 'new';
 let familyMembers = {me:true, wife:true};
 let rebalProfile = 'family';
 let detailAsset = null; // 當前查看明細的標的
+let dividends = [];
+let divDest = 'cash';
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 const PCT = v => (v>=0?'+':'')+v.toFixed(2)+'%';
@@ -83,6 +85,7 @@ function saveData() {
   localStorage.setItem('family_debts', JSON.stringify(debts));
   localStorage.setItem('include_debt', JSON.stringify(includeDebt));
   localStorage.setItem('family_members', JSON.stringify(familyMembers));
+  localStorage.setItem('family_dividends', JSON.stringify(dividends));
 }
 function loadData() {
   try {
@@ -95,6 +98,8 @@ function loadData() {
     if(d)  debts  = JSON.parse(d);
     if(id !== null) includeDebt = JSON.parse(id);
     if(fm) familyMembers = JSON.parse(fm);
+    const dv = localStorage.getItem('family_dividends');
+    if(dv) dividends = JSON.parse(dv);
     if(n)  { names = JSON.parse(n); updateNameLabels(); }
     applyTheme(localStorage.getItem('theme') || 'arctic');
     updateDebtToggleUI();
@@ -613,6 +618,24 @@ function openGroupDetail(key) {
   if(totalFee>0) body.innerHTML+='<div style="padding:8px 0;font-size:12px;color:var(--text2);border-top:1px solid var(--border);margin-top:8px">累計手續費：<span style="font-weight:600;color:var(--text)">'+fmtCur(totalFee,cat.cur)+'</span></div>';
   // 新增按鈕
   body.innerHTML += '<button class="btn-primary" style="width:100%;margin-top:12px;justify-content:center" onclick="addToGroup()"><i class="ti ti-plus"></i> 新增一筆</button>';
+  if(!['twd_cash','usd_cash','real_estate'].includes(type)) {
+    body.innerHTML += '<button class="btn-secondary" style="width:100%;margin-top:8px;justify-content:center" onclick="openDividendModal()"><i class="ti ti-coins"></i> 新增配息</button>';
+  }
+  // 配息紀錄區塊
+  const divRecs = dividends.filter(d=>d.sourceKey===key).sort((a,b)=>b.date.localeCompare(a.date));
+  if(divRecs.length > 0) {
+    body.innerHTML += '<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">'
+      +'<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px"><i class="ti ti-coins" style="font-size:12px;vertical-align:-1px"></i> 配息紀錄</div>'
+      + divRecs.map(d => {
+        const destLabel = d.destination==='cash'
+          ? '存入 '+(d.cashLabel||'現金帳戶')
+          : '再投入 '+(d.targetName||d.targetTicker||'')+(d.targetShares?' · '+d.targetShares+' 股':'');
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">'
+          +'<div><div style="font-size:13px;font-weight:600;color:var(--text)">'+fmtCur(d.amount,d.currency)+'</div>'
+          +'<div style="font-size:11px;color:var(--text2);margin-top:2px">'+d.date+' · '+destLabel+'</div></div></div>';
+      }).join('')
+      +'</div>';
+  }
   document.getElementById('detail-modal-overlay').style.display = 'flex';
 }
 function addToGroup() {
@@ -635,6 +658,107 @@ function closeDetailModal() {
 }
 function detailOverlayClick(e) {
   if(e.target===document.getElementById('detail-modal-overlay')) closeDetailModal();
+}
+
+// 配息 Modal
+function openDividendModal() {
+  if(!detailAsset) return;
+  const cat = CATS[detailAsset.type]||{cur:'TWD'};
+  document.getElementById('div-date').value = todayStr();
+  document.getElementById('div-amount').value = '';
+  document.getElementById('div-currency').value = cat.cur;
+
+  // 填入現金帳戶選項（全部現金資產，不限 profile）
+  const cashSel = document.getElementById('div-cash-account');
+  cashSel.innerHTML = '';
+  assets.forEach((a, idx) => {
+    if(!['twd_cash','usd_cash'].includes(a.type)) return;
+    const c = CATS[a.type];
+    cashSel.innerHTML += '<option value="'+idx+'">'+(a.note||c.label)+' · '+(a.owner==='me'?names.me:names.wife)+' ('+fmtCur(a.amt||0,c.cur)+')</option>';
+  });
+  if(!cashSel.options.length) cashSel.innerHTML = '<option value="">（尚無現金帳戶）</option>';
+
+  // 填入再投入標的選項（全部非現金、非不動產標的）
+  const targetSel = document.getElementById('div-target-asset');
+  targetSel.innerHTML = '';
+  groupAssets(assets).forEach(g => {
+    if(['twd_cash','usd_cash','real_estate'].includes(g.type)) return;
+    const c = CATS[g.type]||{};
+    targetSel.innerHTML += '<option value="'+g.key+'">'+(g.name||g.ticker||g.key)+' ('+c.label+')</option>';
+  });
+  if(!targetSel.options.length) targetSel.innerHTML = '<option value="">（尚無投資標的）</option>';
+
+  setDivDest('cash');
+  document.getElementById('dividend-modal-overlay').style.display = 'flex';
+}
+function closeDividendModal() {
+  document.getElementById('dividend-modal-overlay').style.display = 'none';
+}
+function divOverlayClick(e) {
+  if(e.target===document.getElementById('dividend-modal-overlay')) closeDividendModal();
+}
+function setDivDest(d) {
+  divDest = d;
+  document.getElementById('div-dest-cash').classList.toggle('active', d==='cash');
+  document.getElementById('div-dest-reinvest').classList.toggle('active', d==='reinvest');
+  document.getElementById('div-cash-section').style.display = d==='cash' ? '' : 'none';
+  document.getElementById('div-reinvest-section').style.display = d==='reinvest' ? '' : 'none';
+}
+function submitDividend() {
+  if(!detailAsset) return;
+  const date = document.getElementById('div-date').value || todayStr();
+  const amount = parseFloat(document.getElementById('div-amount').value)||0;
+  if(!amount) return;
+  const currency = document.getElementById('div-currency').value;
+  const sourceName = detailAsset.name||detailAsset.ticker||detailAsset.key;
+
+  const record = {id:Date.now(), date, amount, currency, sourceKey:detailAsset.key, sourceName, destination:divDest};
+
+  if(divDest === 'cash') {
+    const cashIdx = parseInt(document.getElementById('div-cash-account').value);
+    if(isNaN(cashIdx) || !assets[cashIdx]) return;
+    assets[cashIdx].amt = (assets[cashIdx].amt||0) + amount;
+    const ca = assets[cashIdx];
+    record.cashIdx = cashIdx;
+    record.cashLabel = (ca.note||CATS[ca.type].label)+' · '+(ca.owner==='me'?names.me:names.wife);
+    record.cashType = ca.type;
+  } else {
+    const targetKey = document.getElementById('div-target-asset').value;
+    if(!targetKey) return;
+    const shares = parseFloat(document.getElementById('div-shares').value)||0;
+    const price  = parseFloat(document.getElementById('div-price').value)||0;
+    const fee    = parseFloat(document.getElementById('div-fee').value)||0;
+    if(!shares||!price) return;
+
+    const tg = groupAssets(assets).find(g=>g.key===targetKey);
+    if(!tg) return;
+    const fi = tg.items[0];
+    const ttype = tg.type;
+    let newPos;
+    if(ttype==='tw_fund') {
+      newPos = {type:ttype,fundCode:fi?.fundCode||'',name:tg.name,shares,cost:price,fee,price:fi?.price||price,prevPrice:fi?.prevPrice||price,currency:fi?.currency||'TWD',owner:fi?.owner||'me',buyDate:date,priceSource:''};
+    } else if(ttype==='crypto') {
+      newPos = {type:ttype,ticker:tg.ticker,qty:shares,cost:price,fee,price:fi?.price||price,prevPrice:fi?.prevPrice||price,owner:fi?.owner||'me',buyDate:date,note:'配息再投入',priceSource:''};
+    } else if(ttype==='gold') {
+      newPos = {type:ttype,qty:shares,cost:price,fee,price:fi?.price||price,prevPrice:fi?.prevPrice||price,owner:fi?.owner||'me',buyDate:date,note:'配息再投入',priceSource:''};
+    } else {
+      newPos = {type:ttype,ticker:tg.ticker,name:tg.name,shares,cost:price,fee,feeType:'manual',feePct:fi?.feePct||0.1425,feeManual:fee,price:fi?.price||price,prevPrice:fi?.prevPrice||price,owner:fi?.owner||'me',buyDate:date,note:'配息再投入',priceSource:''};
+    }
+    assets.push(newPos);
+    record.targetKey = targetKey;
+    record.targetTicker = tg.ticker;
+    record.targetName = tg.name||tg.ticker;
+    record.targetShares = shares;
+    record.targetPrice = price;
+    record.targetFee = fee;
+  }
+
+  dividends.push(record);
+  const srcKey = detailAsset.key;
+  saveData();
+  closeDividendModal();
+  // 重開明細 Modal 以顯示最新配息紀錄
+  openGroupDetail(srcKey);
 }
 
 // 基金搜尋
