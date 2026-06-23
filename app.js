@@ -347,7 +347,7 @@ function assetCostTWD(a) {
   if(a.type==='twd_cash') return a.amt||0;
   if(a.type==='usd_cash') return (a.amt||0)*fx.usd.rate;
   if(a.type==='real_estate') return a.purchasePrice||0;
-  if(a.type==='gold') return toTWD((a.cost||0)*(a.qty||0), 'USD');
+  if(a.type==='gold') return toTWD((a.cost||0)*(a.qty||0)+(a.fee||0), 'USD');
   return toTWD((a.cost||0)*(a.shares||a.qty||0)+(a.fee||0), cat.cur);
 }
 function getAllFiltered() {
@@ -445,11 +445,19 @@ function renderDonut(all) {
   const groups = groupAssets(all);
   let slices = [];
   if(dim==='detail') {
-    slices = groups.map(g => ({
-      label: g.ticker||g.type,
-      value: g.items.reduce((s,a)=>s+assetValTWD(a),0),
-      color: g.color,
-    }));
+    const MERGE = new Set(['twd_cash','usd_cash','real_estate','gold']);
+    const sliceMap = {};
+    groups.forEach(g => {
+      const key   = MERGE.has(g.type) ? g.type
+                  : g.ticker ? g.type+'_'+g.ticker
+                  : (g.items[0]?.fundCode ? 'fund_'+g.items[0].fundCode : g.key);
+      const label = MERGE.has(g.type) ? (CATS[g.type]?.label||g.type)
+                  : g.ticker ? g.ticker
+                  : (g.name||CATS[g.type]?.label||g.type);
+      if(!sliceMap[key]) sliceMap[key]={label,value:0,color:g.color};
+      sliceMap[key].value += g.items.reduce((s,a)=>s+assetValTWD(a),0);
+    });
+    slices = Object.values(sliceMap);
   } else {
     Object.entries(TYPE_GROUPS).forEach(([n,g]) => {
       const v = all.filter(a=>g.types.includes(a.type)).reduce((s,a)=>s+assetValTWD(a),0);
@@ -794,6 +802,7 @@ function openEditModal(idx) {
     document.getElementById('f-fund-nav').value    = a.price||'';
     document.getElementById('f-fund-date').value   = a.buyDate||'';
     document.getElementById('f-fund-owner').value  = a.owner||'me';
+    document.getElementById('f-fund-fee').value    = a.fee||'';
   } else if(isCrypto) {
     document.getElementById('f-cry-ticker').value = a.ticker||'';
     document.getElementById('f-cry-qty').value    = a.qty||'';
@@ -802,6 +811,7 @@ function openEditModal(idx) {
     document.getElementById('f-cry-date').value   = a.buyDate||'';
     document.getElementById('f-cry-owner').value  = a.owner||'me';
     document.getElementById('f-cry-note').value   = a.note||'';
+    document.getElementById('f-cry-fee').value    = a.fee||'';
     document.getElementById('cry-price-status').textContent='';
   } else if(isRE) {
     document.getElementById('f-re-address').value  = a.address||'';
@@ -818,6 +828,7 @@ function openEditModal(idx) {
     document.getElementById('f-gold-date').value  = a.buyDate||'';
     document.getElementById('f-gold-owner').value = a.owner||'me';
     document.getElementById('f-gold-note').value  = a.note||'';
+    document.getElementById('f-gold-fee').value   = a.fee||'';
     document.getElementById('gold-price-status').textContent='';
   } else {
     document.getElementById('f-ticker').value     = a.ticker||'';
@@ -923,7 +934,7 @@ function submitAsset() {
     const nav=parseFloat(document.getElementById('f-fund-nav').value)||0;
     const cur=document.getElementById('f-fund-cur').value||'TWD';
     if(!code||!qty) return;
-    obj={type:'tw_fund',fundCode:code,name,shares:qty,cost,price:nav,prevPrice:nav,currency:cur,owner:document.getElementById('f-fund-owner').value,buyDate:document.getElementById('f-fund-date').value||today,priceSource:nav?'live':''};
+    obj={type:'tw_fund',fundCode:code,name,shares:qty,cost,fee:parseFloat(document.getElementById('f-fund-fee').value)||0,price:nav,prevPrice:nav,currency:cur,owner:document.getElementById('f-fund-owner').value,buyDate:document.getElementById('f-fund-date').value||today,priceSource:nav?'live':''};
   } else if(t==='crypto') {
     const ticker=document.getElementById('f-cry-ticker').value.trim().toUpperCase();
     const qty=parseFloat(document.getElementById('f-cry-qty').value)||0;
@@ -931,7 +942,7 @@ function submitAsset() {
     const price=parseFloat(document.getElementById('f-cry-price').value)||0;
     const prevPrice=parseFloat(document.getElementById('f-cry-price').dataset.prevClose)||price;
     if(!ticker||!qty) return;
-    obj={type:'crypto',ticker,qty,cost,price,prevPrice,owner:document.getElementById('f-cry-owner').value,buyDate:document.getElementById('f-cry-date').value||today,note:document.getElementById('f-cry-note').value,priceSource:price?'live':''};
+    obj={type:'crypto',ticker,qty,cost,fee:parseFloat(document.getElementById('f-cry-fee').value)||0,price,prevPrice,owner:document.getElementById('f-cry-owner').value,buyDate:document.getElementById('f-cry-date').value||today,note:document.getElementById('f-cry-note').value,priceSource:price?'live':''};
   } else if(t==='real_estate') {
     const address=document.getElementById('f-re-address').value.trim();
     const purchasePrice=parseFloat(document.getElementById('f-re-purchase').value)||0;
@@ -943,7 +954,7 @@ function submitAsset() {
     const price=parseFloat(document.getElementById('f-gold-price').value)||0;
     const prevPrice=parseFloat(document.getElementById('f-gold-price').dataset.prevClose)||price;
     if(!qty) return;
-    obj={type:'gold',qty,cost,price,prevPrice,owner:document.getElementById('f-gold-owner').value,buyDate:document.getElementById('f-gold-date').value||today,note:document.getElementById('f-gold-note').value,priceSource:price?'live':''};
+    obj={type:'gold',qty,cost,fee:parseFloat(document.getElementById('f-gold-fee').value)||0,price,prevPrice,owner:document.getElementById('f-gold-owner').value,buyDate:document.getElementById('f-gold-date').value||today,note:document.getElementById('f-gold-note').value,priceSource:price?'live':''};
   } else {
     const ticker=document.getElementById('f-ticker').value.trim().toUpperCase();
     const name=document.getElementById('f-name').value.trim()||TW_NAMES[ticker]||ticker;
