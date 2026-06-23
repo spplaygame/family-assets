@@ -282,6 +282,7 @@ function updateDebtToggleUI() {
 function debtToTWD(d) { return toTWD(d.remaining||0, d.currency||'TWD'); }
 function calcMonthlyPayment(principal, annualRate, totalMonths, graceMonths, method) {
   const r = annualRate/100/12, g = graceMonths||0;
+  if(!totalMonths) return {total:0, principal:0, interest:0};
   if(!r) return {total:principal/totalMonths, principal:principal/totalMonths, interest:0};
   const interest = principal*r;
   if(method==='equal') {
@@ -351,7 +352,7 @@ function groupAssets(all) {
   const map = {};
   all.forEach((a, idx) => {
     const key = a.type+'__'+(a.ticker||a.type+'_'+idx);
-    if(!map[key]) map[key] = {type:a.type, ticker:a.ticker||'', name:a.name||'', items:[], color:(CATS[a.type]||{}).color||'#888'};
+    if(!map[key]) map[key] = {key, type:a.type, ticker:a.ticker||'', name:a.name||'', items:[], color:(CATS[a.type]||{}).color||'#888'};
     map[key].items.push({...a, _idx: assets.indexOf(a)});
     if(TW_NAMES[a.ticker]) map[key].name = TW_NAMES[a.ticker];
   });
@@ -410,7 +411,7 @@ function renderTrend(all, totalTWD) {
     labels.push((d.getMonth()+1)+'/'+d.getDate());
     const dayVal = all.reduce((s,a) => {
       if(a.buyDate && new Date(a.buyDate)>d) return s;
-      return s + (i===0 ? assetValTWD(a) : assetCostTWD(a));
+      return s + assetValTWD(a);
     }, 0);
     data.push(Math.round(dayVal-debtTotal));
   }
@@ -448,7 +449,8 @@ function renderDonut(all) {
   }
   slices.sort((a,b)=>b.value-a.value);
   const total = slices.reduce((s,x)=>s+x.value,0)||1;
-  document.getElementById('dc-label').textContent = '總資產';
+  const dcLbl={me:names.me+'資產',wife:names.wife+'資產',family:'總資產'};
+  document.getElementById('dc-label').textContent = dcLbl[profile]||'總資產';
   document.getElementById('dc-sub').textContent   = fmtTWD(total);
   if(donutChart) donutChart.destroy();
   donutChart = new Chart(document.getElementById('donut-chart').getContext('2d'), {
@@ -487,7 +489,11 @@ function renderSections(all) {
       const groupVal   = g.items.reduce((s,a)=>s+assetValTWD(a),0);
       const groupToday = g.items.reduce((s,a)=>s+assetTodayNative(a),0);
       const groupFx    = g.items.reduce((s,a)=>s+assetFxPnL(a),0);
-      const groupUnreal= g.items.reduce((s,a)=>s+assetValNative(a)-(a.cost||0)*(a.shares||a.qty||0),0);
+      const groupUnreal= g.items.reduce((s,a)=>{
+        if(a.type==='real_estate') return s+(a.currentValue||a.purchasePrice||0)-(a.purchasePrice||0);
+        if(['twd_cash','usd_cash'].includes(a.type)) return s;
+        return s+assetValNative(a)-(a.cost||0)*(a.shares||a.qty||0)-(a.fee||0);
+      },0);
       const groupCost  = g.items.reduce((s,a)=>s+(a.cost||0)*(a.shares||a.qty||0),0);
       const unrealPct  = groupCost ? groupUnreal/groupCost*100 : 0;
       const totalShares= g.items.reduce((s,a)=>s+(a.shares||a.qty||0),0);
@@ -500,7 +506,7 @@ function renderSections(all) {
         ? '<div class="'+CLS(groupFx)+'" style="font-size:12px">'+(groupFx>=0?'+':'')+fmtTWD(groupFx)+'</div>'
         : '<span style="color:var(--text3)">—</span>';
 
-      if(isCash) return '<tr onclick="openGroupDetail(\''+k+'__'+(g.ticker||k)+'\')">'
+      if(isCash) return '<tr onclick="openGroupDetail(\''+g.key+'\')">'
         +'<td><div class="ticker-main">'+(g.items[0]?.note||cat.label)+'</div>'
         +'<div class="ticker-sub">'+(g.items[0]?.owner==='me'?names.me:names.wife)+'</div></td>'
         +'<td><span class="badge '+cat.badge+'">'+cat.label+'</span></td>'
@@ -510,7 +516,7 @@ function renderSections(all) {
         +'<td class="rc">'+fxCell+'</td>'
         +'<td class="rc"><div style="font-weight:700;font-size:13px">'+fmtCur(g.items[0]?.amt||0,cat.cur)+'</div></td></tr>';
 
-      if(isRE) return '<tr onclick="openGroupDetail(\''+k+'__'+(g.ticker||k)+'\')">'
+      if(isRE) return '<tr onclick="openGroupDetail(\''+g.key+'\')">'
         +'<td><div class="ticker-main">'+(g.items[0]?.address||'不動產')+'</div>'
         +'<div class="ticker-sub">'+(g.items[0]?.owner==='me'?names.me:names.wife)+(g.items[0]?.area?' · '+g.items[0].area+'坪':'')+'</div></td>'
         +'<td><span class="badge">不動產</span></td>'
@@ -522,7 +528,7 @@ function renderSections(all) {
         +'<div class="mini '+CLS(groupUnreal)+'">'+(groupUnreal>=0?'+':'')+fmtTWD(groupUnreal)+'</div></td></tr>';
 
       const dispName = g.name&&g.name!==g.ticker ? g.name : '';
-      return '<tr onclick="openGroupDetail(\''+k+'__'+g.ticker+'\')">'
+      return '<tr onclick="openGroupDetail(\''+g.key+'\')">'
         +'<td><div class="ticker-main">'+g.ticker+liveTag+'</div>'
         +'<div class="ticker-sub">'+dispName+(g.items.length>1?' ('+g.items.length+'筆)':'')+'</div></td>'
         +'<td><span class="badge '+cat.badge+'">'+cat.label+'</span></td>'
@@ -554,10 +560,10 @@ function renderSections(all) {
 // 標的明細 Modal
 function openGroupDetail(key) {
   const all = getAllFiltered();
-  const [type, ticker] = key.split('__');
-  const group = groupAssets(all).find(g=>g.type===type&&(g.ticker===ticker||key===type+'__'+type));
+  const group = groupAssets(all).find(g=>g.key===key);
   if(!group) return;
   detailAsset = group;
+  const type = group.type;
   const cat = CATS[type]||{cur:'TWD'};
   const modal = document.getElementById('detail-modal');
   const title = document.getElementById('detail-modal-title');
@@ -584,6 +590,9 @@ function openGroupDetail(key) {
       +'<div class="detail-val">'+costTotal+'</div></div>';
   }).join('');
 
+  // 累計手續費
+  const totalFee=group.items.reduce((s,a)=>s+(a.fee||0),0);
+  if(totalFee>0) body.innerHTML+='<div style="padding:8px 0;font-size:12px;color:var(--text2);border-top:1px solid var(--border);margin-top:8px">累計手續費：<span style="font-weight:600;color:var(--text)">'+fmtCur(totalFee,cat.cur)+'</span></div>';
   // 新增按鈕
   body.innerHTML += '<button class="btn-primary" style="width:100%;margin-top:12px;justify-content:center" onclick="addToGroup()"><i class="ti ti-plus"></i> 新增一筆</button>';
   document.getElementById('detail-modal-overlay').style.display = 'flex';
@@ -731,8 +740,6 @@ function setUKCur(cur) {
 // 資產 Modal
 function openAddModal() {
   editIndex = -1;
-  if(!selType) selType = null;
-  selUKCur = 'USD';
   document.getElementById('modal-title-text').textContent = '新增資產';
   document.getElementById('step1').style.display = selType ? 'none' : 'block';
   document.getElementById('step2').style.display = selType ? 'block' : 'none';
@@ -740,7 +747,7 @@ function openAddModal() {
   document.getElementById('submit-btn').textContent = '新增';
   document.getElementById('delete-btn').style.display = 'none';
   document.querySelectorAll('.type-btn').forEach(b=>b.classList.remove('selected'));
-  if(selType) pickType(selType);
+  if(selType) pickType(selType, false);
   document.getElementById('modal-overlay').style.display = 'flex';
 }
 function openEditModal(idx) {
@@ -848,16 +855,21 @@ function goStep1() {
   document.getElementById('uk-cur-selector').style.display='none';
   document.querySelectorAll('.type-btn').forEach(b=>b.classList.remove('selected'));
 }
-function pickType(t) {
+function pickType(t, resetCurrency=true) {
   selType = t;
   document.querySelectorAll('.type-btn').forEach(b=>b.classList.remove('selected'));
   document.getElementById('t-'+t)?.classList.add('selected');
   document.getElementById('step1').style.display='none';
   document.getElementById('step2').style.display='block';
   showFormForType(t);
-  if(t==='uk_stock') setUKCur('USD');
+  if(t==='uk_stock'||t==='uk_stock_usd') {
+    setUKCur(resetCurrency ? 'USD' : selUKCur);
+  }
   const cat = CATS[t];
-  if(cat) { document.getElementById('funit').textContent=cat.cur; document.getElementById('cash-lbl').textContent='金額（'+cat.cur+'）'; }
+  if(cat) {
+    if(t!=='uk_stock'&&t!=='uk_stock_usd') document.getElementById('funit').textContent=cat.cur;
+    document.getElementById('cash-lbl').textContent='金額（'+cat.cur+'）';
+  }
   ['f-ticker','f-name','f-shares','f-cost','f-note','f-cash-note','f-cry-note'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   ['f-price','f-cry-price'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   ['price-status','cry-price-status'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='';});
@@ -1070,7 +1082,9 @@ function renderDebt() {
   document.getElementById('debt-total-display').textContent=fmtTWD(totalDebtTWD());
   document.getElementById('debt-monthly-display').textContent=fmtTWD(totalMonthlyTWD());
   document.getElementById('debt-count-display').textContent=all.length+' 筆';
-  document.getElementById('debt-rate-display').textContent=(all.reduce((s,d)=>s+(d.rate||0),0)/all.length).toFixed(2)+'%';
+  const totalW=all.reduce((s,d)=>s+(d.remaining||0),0);
+  const wRate=totalW>0?all.reduce((s,d)=>s+(d.rate||0)*(d.remaining||0),0)/totalW:all.reduce((s,d)=>s+(d.rate||0),0)/all.length;
+  document.getElementById('debt-rate-display').textContent=wRate.toFixed(2)+'%';
   document.getElementById('debt-include-display').textContent=includeDebt?'是（點擊切換）':'否（點擊切換）';
   const today=new Date();
   document.getElementById('debt-list').innerHTML=all.map(d=>{
@@ -1185,7 +1199,7 @@ function setProfile(p){
   ['me','wife','family'].forEach(id=>document.getElementById('pb-'+id)?.classList.toggle('active',id===p));
   rebalRows=[]; renderAll();
 }
-function setChartPeriod(btn,p){chartPeriod=p;document.querySelectorAll('.pbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderAll();}
+function setChartPeriod(btn,p){chartPeriod=p;btn.closest('.period-bar').querySelectorAll('.pbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderAll();}
 function setDim(btn,d){dim=d;document.querySelectorAll('.dbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderAll();}
 function toggleRename(){const b=document.getElementById('rename-bar');b.style.display=b.style.display==='none'?'block':'none';}
 function applyRename(){

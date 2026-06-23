@@ -156,7 +156,7 @@ export default async function handler(req, res) {
       const found = (d?.data || []).find(f => f.fundCode === symbol);
       if (!found) { res.status(404).json({ error: 'fund not found' }); return; }
       const nav = parseFloat(found.navValue) || 0;
-      res.json({ nav, prevNav: nav, navDate: found.navTxnDate || '' });
+      res.json({ nav, navDate: found.navTxnDate || '' });
 
     } else {
       res.status(400).json({ error: 'unknown type' });
