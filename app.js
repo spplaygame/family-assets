@@ -199,17 +199,26 @@ async function fetchAll() {
   btn.innerHTML = '<span class="spin"><i class="ti ti-loader-2"></i></span> 查詢中…';
   try { await fetchFX(); updateFxBar(); } catch(e) { console.warn('FX fail', e); }
 
-  // 股票 / ETF / 黃金
-  for(const a of assets.filter(x=>['tw_stock','us_stock','uk_stock','uk_stock_usd','gold'].includes(x.type))) {
+  // 股票 / ETF / 黃金（依 symbol 分組，每支只打一次 API）
+  const symMap = {};
+  assets.filter(x=>['tw_stock','us_stock','uk_stock','uk_stock_usd','gold'].includes(x.type)).forEach(a=>{
+    const sym = a.type==='gold'?'GC=F':toYahooSymbol(a.ticker,a.type);
+    if(!symMap[sym]) symMap[sym]=[];
+    symMap[sym].push(a);
+  });
+  for(const [sym,group] of Object.entries(symMap)) {
     try {
-      const sym = a.type==='gold' ? 'GC=F' : toYahooSymbol(a.ticker, a.type);
       const q = await proxyQuote(sym);
-      a.prevPrice = q.prevClose;
-      a.price = q.price;
-      if(q.name && !TW_NAMES[a.ticker]) a.name = q.name;
-      if(TW_NAMES[a.ticker]) a.name = TW_NAMES[a.ticker];
-      a.priceSource = 'live';
-    } catch { a.priceSource = 'error'; }
+      group.forEach(a=>{
+        const oldPrev = a.prevPrice;
+        a.price = q.price;
+        a.prevPrice = q.prevClose!==null ? q.prevClose : (oldPrev??null);
+        a.prevPriceSource = q.prevClose!==null ? 'live' : (oldPrev!=null ? 'stored' : 'missing');
+        if(q.name&&!TW_NAMES[a.ticker]) a.name=q.name;
+        if(TW_NAMES[a.ticker]) a.name=TW_NAMES[a.ticker];
+        a.priceSource='live';
+      });
+    } catch { group.forEach(a=>a.priceSource='error'); }
   }
 
   // 基金
@@ -488,6 +497,7 @@ function renderSections(all) {
     const rows   = byCat[k].map(g => {
       const groupVal   = g.items.reduce((s,a)=>s+assetValTWD(a),0);
       const groupToday = g.items.reduce((s,a)=>s+assetTodayNative(a),0);
+      const hasNoPrev  = g.items.some(a=>a.prevPriceSource==='missing');
       const groupFx    = g.items.reduce((s,a)=>s+assetFxPnL(a),0);
       const groupUnreal= g.items.reduce((s,a)=>{
         if(a.type==='real_estate') return s+(a.currentValue||a.purchasePrice||0)-(a.purchasePrice||0);
@@ -535,7 +545,7 @@ function renderSections(all) {
         +'<td class="rc"><div style="font-size:12px">'+totalShares.toLocaleString()+'</div>'
         +'<div class="mini">@ '+(curPrice?Number(curPrice).toFixed(2):'—')+'</div></td>'
         +'<td class="rc"><div style="font-size:12px">'+(avgCost?fmtCur(avgCost,cat.cur):'—')+'</div></td>'
-        +'<td class="rc"><div class="'+CLS(groupToday)+'" style="font-size:12px">'+(groupToday?((groupToday>=0?'+':'')+fmtCur(groupToday,cat.cur)):'—')+'</div></td>'
+        +'<td class="rc"><div class="'+(hasNoPrev?'':CLS(groupToday))+'" style="font-size:12px">'+(hasNoPrev?'<span style="color:var(--text3);font-size:10px">N/A</span>':(groupToday?(groupToday>=0?'+':'')+fmtCur(groupToday,cat.cur):'—'))+'</div></td>'
         +'<td class="rc">'+fxCell+'</td>'
         +'<td class="rc"><div style="font-weight:700;font-size:12px">'+fmtCur(g.items.reduce((s,a)=>s+assetValNative(a),0),cat.cur)+'</div>'
         +'<div class="mini '+CLS(groupUnreal)+'">'+(groupUnreal?(groupUnreal>=0?'+':'')+fmtCur(groupUnreal,cat.cur)+' ('+PCT(unrealPct)+')':'—')+'</div></td></tr>';
@@ -1213,4 +1223,5 @@ function applyRename(){
 // 初始化
 loadData();
 checkAutoDeduct();
-fetchFX().then(()=>{updateFxBar();renderAll();}).catch(()=>renderAll());
+renderAll();
+fetchAll();

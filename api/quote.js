@@ -18,7 +18,7 @@ export default async function handler(req, res) {
       }
       res.json({
         price: meta.regularMarketPrice,
-        prevClose: meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice,
+        prevClose: meta.chartPreviousClose || meta.previousClose || null,
         name: meta.longName || meta.shortName || symbol,
         currency: meta.currency,
       });
