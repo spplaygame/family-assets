@@ -65,6 +65,7 @@ let rebalProfile = 'family';
 let detailAsset = null; // 當前查看明細的標的
 let dividends = [];
 let divDest = 'cash';
+let transactions = [];
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 const PCT = v => (v>=0?'+':'')+v.toFixed(2)+'%';
@@ -86,6 +87,7 @@ function saveData() {
   localStorage.setItem('include_debt', JSON.stringify(includeDebt));
   localStorage.setItem('family_members', JSON.stringify(familyMembers));
   localStorage.setItem('family_dividends', JSON.stringify(dividends));
+  localStorage.setItem('family_transactions', JSON.stringify(transactions));
 }
 function loadData() {
   try {
@@ -100,6 +102,8 @@ function loadData() {
     if(fm) familyMembers = JSON.parse(fm);
     const dv = localStorage.getItem('family_dividends');
     if(dv) dividends = JSON.parse(dv);
+    const tx = localStorage.getItem('family_transactions');
+    if(tx) transactions = JSON.parse(tx);
     if(n)  { names = JSON.parse(n); updateNameLabels(); }
     applyTheme(localStorage.getItem('theme') || 'arctic');
     updateDebtToggleUI();
@@ -619,7 +623,22 @@ function openGroupDetail(key) {
   // 新增按鈕
   body.innerHTML += '<button class="btn-primary" style="width:100%;margin-top:12px;justify-content:center" onclick="addToGroup()"><i class="ti ti-plus"></i> 新增一筆</button>';
   if(!['twd_cash','usd_cash','real_estate'].includes(type)) {
+    body.innerHTML += '<button class="btn-secondary" style="width:100%;margin-top:8px;justify-content:center;color:var(--red)" onclick="openSellModal()"><i class="ti ti-trending-down"></i> 賣出</button>';
     body.innerHTML += '<button class="btn-secondary" style="width:100%;margin-top:8px;justify-content:center" onclick="openDividendModal()"><i class="ti ti-coins"></i> 新增配息</button>';
+  }
+  // 賣出紀錄區塊
+  const sellRecs = transactions.filter(t=>t.action==='sell'&&t.ticker===group.ticker&&t.type===group.type).sort((a,b)=>b.date.localeCompare(a.date));
+  if(sellRecs.length > 0) {
+    body.innerHTML += '<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">'
+      +'<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px"><i class="ti ti-arrows-exchange" style="font-size:12px;vertical-align:-1px"></i> 賣出紀錄</div>'
+      + sellRecs.map(t=>{
+        const pnlCls = t.realizedPnL>=0?'pos':'neg';
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">'
+          +'<div><div style="font-size:13px;font-weight:600" class="'+pnlCls+'">'+fmtCur(t.realizedPnL,t.currency)+'</div>'
+          +'<div style="font-size:11px;color:var(--text2);margin-top:2px">'+t.date+' · 賣 '+t.shares+' 股 @ '+fmtCur(t.sellPrice,t.currency)+'</div></div>'
+          +'<div style="text-align:right;font-size:11px;color:var(--text2)">淨收入<br><span style="font-weight:600;color:var(--text)">'+fmtCur(t.netProceeds,t.currency)+'</span></div></div>';
+      }).join('')
+      +'</div>';
   }
   // 配息紀錄區塊
   const divRecs = dividends.filter(d=>d.sourceKey===key).sort((a,b)=>b.date.localeCompare(a.date));
@@ -658,6 +677,143 @@ function closeDetailModal() {
 }
 function detailOverlayClick(e) {
   if(e.target===document.getElementById('detail-modal-overlay')) closeDetailModal();
+}
+
+// 賣出 Modal
+function openSellModal() {
+  if(!detailAsset) return;
+  const isGold   = detailAsset.type==='gold';
+  const isCrypto = detailAsset.type==='crypto';
+  const isTWStock= detailAsset.type==='tw_stock';
+  const cat = CATS[detailAsset.type]||{cur:'TWD'};
+  document.getElementById('sell-modal-title').textContent = (detailAsset.name||detailAsset.ticker||'') + ' 賣出';
+  document.getElementById('sell-date').value   = todayStr();
+  document.getElementById('sell-shares').value = '';
+  document.getElementById('sell-price').value  = '';
+  document.getElementById('sell-fee').value    = '';
+  document.getElementById('sell-tax').value    = '';
+  document.getElementById('sell-shares-label').textContent = isGold ? '賣出盎司數' : isCrypto ? '賣出數量' : '賣出股數';
+  document.getElementById('sell-tax-hint').textContent = isTWStock ? '台股賣出預設 0.3%（可修改）' : '';
+  document.getElementById('sell-preview').style.display = 'none';
+  // 台股預填交易稅（等使用者輸入價格和股數後再自動算，這裡先清空）
+  document.getElementById('sell-modal-overlay').style.display = 'flex';
+}
+function closeSellModal() {
+  document.getElementById('sell-modal-overlay').style.display = 'none';
+}
+function sellOverlayClick(e) {
+  if(e.target===document.getElementById('sell-modal-overlay')) closeSellModal();
+}
+
+// FIFO 批次配對
+function fifoMatch(group, sharesToSell) {
+  const isQty = ['crypto','gold'].includes(group.type);
+  const lots = [...group.items]
+    .sort((a,b)=>(a.buyDate||'').localeCompare(b.buyDate||''))
+    .filter(a => {
+      const rem = a.sharesRemaining ?? (isQty ? (a.qty||0) : (a.shares||0));
+      return rem > 0;
+    });
+  let remaining = sharesToSell;
+  const matched = [];
+  for(const lot of lots) {
+    if(remaining <= 0) break;
+    const lotTotal    = isQty ? (lot.qty||0) : (lot.shares||0);
+    const lotRemaining= lot.sharesRemaining ?? lotTotal;
+    const take        = Math.min(lotRemaining, remaining);
+    if(take <= 0) continue;
+    const allocatedBuyFee = lotTotal > 0 ? (lot.fee||0) * (take / lotTotal) : 0;
+    matched.push({ lotId: lot.id||('lot_'+lot._idx), lotIdx: lot._idx, shares: take, unitCost: lot.cost||0, allocatedBuyFee, buyDate: lot.buyDate||'' });
+    remaining -= take;
+  }
+  return { matched, unfilled: Math.max(0, remaining) };
+}
+
+function updateSellPreview() {
+  if(!detailAsset) return;
+  const shares = parseFloat(document.getElementById('sell-shares').value)||0;
+  const price  = parseFloat(document.getElementById('sell-price').value)||0;
+  const fee    = parseFloat(document.getElementById('sell-fee').value)||0;
+  const isTWStock = detailAsset.type==='tw_stock';
+  // 台股自動計算交易稅
+  if(isTWStock && shares && price && !document.getElementById('sell-tax').value) {
+    document.getElementById('sell-tax').value = (shares * price * 0.003).toFixed(0);
+  }
+  const tax = parseFloat(document.getElementById('sell-tax').value)||0;
+  const preview = document.getElementById('sell-preview');
+  if(!shares || !price) { preview.style.display='none'; return; }
+  const { matched, unfilled } = fifoMatch(detailAsset, shares);
+  const cat = CATS[detailAsset.type]||{cur:'TWD'};
+  const cur = cat.cur;
+  const grossProceeds = shares * price;
+  const netProceeds   = grossProceeds - fee - tax;
+  const costBasis     = matched.reduce((s,m)=>s + m.shares*m.unitCost + m.allocatedBuyFee, 0);
+  const pnl           = netProceeds - costBasis;
+  const lotsHtml = matched.length > 0
+    ? '<div style="font-weight:600;color:var(--text);margin-bottom:4px">本次將售出批次：</div>'
+      + matched.map(m=>'<div>'+m.buyDate+' 批 · '+m.shares+' 股 @ '+fmtCur(m.unitCost,cur)+'</div>').join('')
+      + (unfilled>0 ? '<div style="color:var(--red);margin-top:4px">⚠️ 持倉不足，尚缺 '+unfilled+' 股</div>' : '')
+    : '<div style="color:var(--red)">無可用批次</div>';
+  document.getElementById('sell-preview-lots').innerHTML = lotsHtml;
+  document.getElementById('sp-gross').textContent = fmtCur(grossProceeds, cur);
+  document.getElementById('sp-fees').textContent  = '−'+fmtCur(fee+tax, cur);
+  document.getElementById('sp-cost').textContent  = '−'+fmtCur(costBasis, cur);
+  document.getElementById('sp-pnl').innerHTML = '<span class="'+(pnl>=0?'pos':'neg')+'" style="font-size:14px">'+fmtCur(pnl,cur)+'</span>';
+  preview.style.display = 'block';
+}
+
+function submitSell() {
+  if(!detailAsset) return;
+  const date   = document.getElementById('sell-date').value || todayStr();
+  const shares = parseFloat(document.getElementById('sell-shares').value)||0;
+  const price  = parseFloat(document.getElementById('sell-price').value)||0;
+  const fee    = parseFloat(document.getElementById('sell-fee').value)||0;
+  const tax    = parseFloat(document.getElementById('sell-tax').value)||0;
+  if(!shares||!price) return;
+  const { matched, unfilled } = fifoMatch(detailAsset, shares);
+  if(unfilled > 0) { alert('持倉數量不足，最多可賣出 '+(shares-unfilled)+' 股'); return; }
+  const cat = CATS[detailAsset.type]||{cur:'TWD'};
+  const cur = cat.cur;
+  const isQty = ['crypto','gold'].includes(detailAsset.type);
+  const grossProceeds = shares * price;
+  const netProceeds   = grossProceeds - fee - tax;
+  const costBasis     = matched.reduce((s,m)=>s + m.shares*m.unitCost + m.allocatedBuyFee, 0);
+  const realizedPnL   = netProceeds - costBasis;
+  const fxRate = cur==='USD' ? fx.usd.rate : cur==='GBP' ? fx.gbp.rate : 1;
+
+  const record = {
+    id: 'tx_sell_'+Date.now(), action:'sell', date,
+    ticker: detailAsset.ticker, name: detailAsset.name||detailAsset.ticker,
+    type: detailAsset.type, owner: detailAsset.items[0]?.owner||'me', currency: cur,
+    shares, sellPrice: price, grossProceeds, sellFee: fee, transactionTax: tax,
+    netProceeds, costBasis, realizedPnL, fxRate, realizedPnLTWD: realizedPnL * fxRate,
+    matchedLots: matched
+  };
+
+  // FIFO 扣減各批次剩餘數量
+  matched.forEach(m => {
+    const idx = m.lotIdx;
+    if(idx == null || !assets[idx]) return;
+    const a = assets[idx];
+    const cur = isQty ? (a.qty||0) : (a.shares||0);
+    const next = +(cur - m.shares).toFixed(8);
+    if(next <= 0) {
+      a._toDelete = true;
+    } else {
+      if(isQty) a.qty = next; else a.shares = next;
+      a.sharesRemaining = next;
+    }
+  });
+  assets = assets.filter(a => !a._toDelete);
+
+  transactions.push(record);
+  const srcKey = detailAsset.key;
+  saveData();
+  closeSellModal();
+  renderAll();
+  // 若該標的還有剩餘持倉則重開明細
+  const stillExists = groupAssets(getAllFiltered()).find(g=>g.key===srcKey);
+  if(stillExists) openGroupDetail(srcKey); else closeDetailModal();
 }
 
 // 配息 Modal
@@ -1092,6 +1248,11 @@ function submitAsset() {
     const fee=feeType==='none'?0:feeType==='pct'?shares*cost*feePct/100:feeManual;
     if(!ticker||!shares||!cost) return;
     obj={type:t,ticker,name,shares,cost,price:price||cost,prevPrice:prevPrice||price||cost,fee,feeType,feePct,feeManual,owner:document.getElementById('f-owner').value,buyDate:document.getElementById('f-date').value||today,note:document.getElementById('f-note').value,priceSource:price?'live':''};
+  }
+  // 非現金/不動產資產加上唯一 ID 與剩餘持倉數量（供 FIFO 賣出使用）
+  if(!['twd_cash','usd_cash','real_estate'].includes(obj.type)) {
+    obj.id = obj.id || ('lot_'+Date.now()+'_'+Math.random().toString(36).substr(2,5));
+    obj.sharesRemaining = obj.shares || obj.qty || 0;
   }
   if(editIndex>=0) assets[editIndex]=obj; else assets.push(obj);
   rebalRows=[]; saveData(); closeModal(); renderAll();
