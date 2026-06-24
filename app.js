@@ -66,6 +66,9 @@ let detailAsset = null; // 當前查看明細的標的
 let dividends = [];
 let divDest = 'cash';
 let transactions = [];
+let historyPrices = {}; // { 'AAPL': {'2026-01-15': 210, ...}, 'crypto_BTC': {...}, ... }
+let historyFX = {};     // { 'USDTWD': {'2026-01-15': 32.5, ...}, 'GBPUSD': {...} }
+let historyFetching = false;
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 const PCT = v => (v>=0?'+':'')+v.toFixed(2)+'%';
@@ -189,6 +192,34 @@ async function proxyFX() {
   const r = await fetch(API+'?type=fx');
   return await r.json();
 }
+async function proxyHistory(symbol, range) {
+  try {
+    const r = await fetch(`${API}?type=history&symbol=${encodeURIComponent(symbol)}&range=${range}`);
+    if(!r.ok) return {};
+    const d = await r.json();
+    const map = {};
+    (d.data||[]).forEach(item => { if(item.close!=null) map[item.date] = item.close; });
+    return map;
+  } catch { return {}; }
+}
+async function proxyCryptoHistory(coinId, days) {
+  try {
+    const r = await fetch(`${API}?type=crypto_history&symbol=${encodeURIComponent(coinId)}&days=${days}`);
+    if(!r.ok) return {};
+    const d = await r.json();
+    const map = {};
+    (d.data||[]).forEach(item => { if(item.close!=null) map[item.date] = item.close; });
+    return map;
+  } catch { return {}; }
+}
+function getHistorySymbol(a) {
+  if(a.type==='tw_stock') return a.ticker+'.TW';
+  if(a.type==='us_stock') return a.ticker;
+  if(a.type==='uk_stock'||a.type==='uk_stock_usd') return a.ticker+'.L';
+  if(a.type==='gold') return 'GC=F';
+  if(a.type==='crypto') return 'crypto_'+a.ticker;
+  return null;
+}
 
 async function fetchFX() {
   const d = await proxyFX();
@@ -264,6 +295,7 @@ async function fetchAll() {
   btn.disabled = false;
   btn.innerHTML = '<i class="ti ti-refresh"></i> 更新報價';
   renderAll();
+  fetchAndRenderHistory();
 }
 
 function updateFxBar() {
@@ -417,37 +449,128 @@ function renderAll() {
 }
 
 function renderTrend(all, totalTWD) {
-  const today   = new Date();
-  const dates   = all.filter(a=>a.buyDate).map(a=>new Date(a.buyDate));
-  const earliest = dates.length ? new Date(Math.min(...dates)) : new Date();
-  const diffDays = Math.max(1, Math.round((today-earliest)/86400000));
-  const days = chartPeriod==='1M'?Math.min(30,diffDays):chartPeriod==='1Y'?Math.min(365,diffDays):diffDays;
-  const labels=[], data=[];
-  const debtTotal = includeDebt ? totalDebtTWD() : 0;
-  for(let i=days;i>=0;i--) {
-    const d = new Date(today); d.setDate(d.getDate()-i);
-    labels.push((d.getMonth()+1)+'/'+d.getDate());
-    const dayVal = all.reduce((s,a) => {
-      if(a.buyDate && new Date(a.buyDate)>d) return s;
-      return s + assetValTWD(a);
-    }, 0);
-    data.push(Math.round(dayVal-debtTotal));
+  const today    = new Date();
+  const todayISO = todayStr();
+  const debtTotal= includeDebt ? totalDebtTWD() : 0;
+
+  // 決定起始日期
+  const buyDates = all.filter(a=>a.buyDate).map(a=>a.buyDate).sort();
+  const earliest = buyDates[0] || todayISO;
+  let startDate;
+  if(chartPeriod==='1M') { startDate=new Date(today); startDate.setDate(startDate.getDate()-30); }
+  else if(chartPeriod==='1Y') { startDate=new Date(today.getFullYear(),0,1); }
+  else { startDate=new Date(earliest); }
+
+  // 建立日期陣列
+  const dates=[];
+  const cur=new Date(startDate);
+  while(cur<=today){ dates.push(cur.toISOString().split('T')[0]); cur.setDate(cur.getDate()+1); }
+
+  // fill-forward：取最近一筆已知收盤價
+  const _fwCache = {};
+  function getPrice(sym, date) {
+    const map = historyPrices[sym];
+    if(!map) return null;
+    const cacheKey = sym+'|'+date;
+    if(_fwCache[cacheKey]!==undefined) return _fwCache[cacheKey];
+    let last=null;
+    for(const d of Object.keys(map).sort()){
+      if(d<=date) last=map[d]; else break;
+    }
+    _fwCache[cacheKey]=last;
+    return last;
   }
+
+  const labels=[], data=[];
+  dates.forEach(date => {
+    const usdRate = getPrice('USDTWD=X',date) || fx.usd.rate;
+    const gbpUsd  = getPrice('GBPUSD=X',date)  || (fx.gbp.rate/fx.usd.rate);
+    const gbpRate = gbpUsd * usdRate;
+
+    let dayVal=0;
+    all.forEach(a=>{
+      if(a.buyDate && a.buyDate>date) return;
+      if(a.type==='twd_cash')     { dayVal+=a.amt||0; return; }
+      if(a.type==='usd_cash')     { dayVal+=(a.amt||0)*usdRate; return; }
+      if(a.type==='real_estate')  { dayVal+=a.currentValue||a.purchasePrice||0; return; }
+      if(a.type==='tw_fund') {
+        const nav=a.price||a.cost||0, qty=a.shares||0, fc=a.currency||'TWD';
+        dayVal+=fc==='USD'?qty*nav*usdRate:qty*nav; return;
+      }
+      const sym=getHistorySymbol(a);
+      const price=(sym?getPrice(sym,date):null)||a.price||a.cost||0;
+      const qty=a.shares||a.qty||0;
+      if(a.type==='tw_stock')         dayVal+=qty*price;
+      else if(a.type==='us_stock')    dayVal+=qty*price*usdRate;
+      else if(a.type==='uk_stock')    dayVal+=qty*price*gbpRate;
+      else if(a.type==='uk_stock_usd')dayVal+=qty*price*usdRate;
+      else if(a.type==='gold')        dayVal+=qty*price*usdRate;
+      else if(a.type==='crypto')      dayVal+=qty*price*usdRate;
+    });
+    const d2=new Date(date);
+    labels.push((d2.getMonth()+1)+'/'+d2.getDate());
+    data.push(Math.round(dayVal-debtTotal));
+  });
+
   if(trendChart) trendChart.destroy();
-  const minVal = Math.min(...data);
-  trendChart = new Chart(document.getElementById('trend-chart').getContext('2d'), {
+  const minVal=Math.min(...data);
+  trendChart=new Chart(document.getElementById('trend-chart').getContext('2d'),{
     type:'line',
-    data:{labels, datasets:[{data, borderColor:'var(--accent)', backgroundColor:'rgba(2,132,199,0.07)', borderWidth:2, pointRadius:0, fill:true, tension:0.3}]},
-    options:{responsive:true, maintainAspectRatio:false,
-      plugins:{legend:{display:false}, tooltip:{callbacks:{label:i=>'TWD '+i.raw.toLocaleString()}}},
+    data:{labels,datasets:[{data,borderColor:'var(--accent)',backgroundColor:'rgba(2,132,199,0.07)',borderWidth:2,pointRadius:0,fill:true,tension:0.3}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>'TWD '+i.raw.toLocaleString()}}},
       scales:{
         x:{ticks:{maxTicksLimit:6,color:'var(--text2)'},grid:{display:false},border:{display:false}},
         y:{min:minVal<0?minVal*1.1:minVal*0.95,
-           ticks:{callback:v=>Math.abs(v)>=10000?(v/10000).toFixed(0)+'萬':v, color:'var(--text2)', maxTicksLimit:4},
+           ticks:{callback:v=>Math.abs(v)>=10000?(v/10000).toFixed(0)+'萬':v,color:'var(--text2)',maxTicksLimit:4},
            grid:{color:'rgba(128,128,128,0.1)'},border:{display:false}}
       }
     }
   });
+}
+
+async function fetchAndRenderHistory() {
+  if(historyFetching) return;
+  historyFetching=true;
+  const all=getAllFiltered();
+  const yahooRange = chartPeriod==='1M'?'1mo':chartPeriod==='1Y'?'ytd':'max';
+  const cryptoDays = chartPeriod==='1M'?'30':chartPeriod==='1Y'?'365':'max';
+
+  const yahooSyms=new Set(['USDTWD=X','GBPUSD=X']);
+  const cryptoMap={};
+  all.forEach(a=>{
+    if(['twd_cash','usd_cash','real_estate','tw_fund'].includes(a.type)) return;
+    if(a.type==='crypto'){
+      const id=CRYPTO_IDS[a.ticker?.toUpperCase()];
+      if(id) cryptoMap[a.ticker]=id;
+    } else {
+      const sym=getHistorySymbol(a);
+      if(sym) yahooSyms.add(sym);
+    }
+  });
+
+  try {
+    await Promise.all([
+      ...[...yahooSyms].map(async sym=>{
+        const map=await proxyHistory(sym, yahooRange);
+        if(Object.keys(map).length){
+          historyPrices[sym]=map;
+          if(sym==='USDTWD=X') historyFX['USDTWD']=map;
+          if(sym==='GBPUSD=X') historyFX['GBPUSD']=map;
+        }
+      }),
+      ...Object.entries(cryptoMap).map(async([ticker,id])=>{
+        const map=await proxyCryptoHistory(id, cryptoDays);
+        if(Object.keys(map).length) historyPrices['crypto_'+ticker]=map;
+      })
+    ]);
+  } catch(e){ console.warn('history fetch error',e); }
+
+  historyFetching=false;
+  // 用真實歷史資料重繪趨勢圖
+  const all2=getAllFiltered();
+  const totalTWD2=all2.reduce((s,a)=>s+assetValTWD(a),0)-(includeDebt?totalDebtTWD():0);
+  renderTrend(all2, totalTWD2);
 }
 
 function renderDonut(all) {
@@ -1505,7 +1628,15 @@ function setProfile(p){
   ['me','wife','family'].forEach(id=>document.getElementById('pb-'+id)?.classList.toggle('active',id===p));
   rebalRows=[]; renderAll();
 }
-function setChartPeriod(btn,p){chartPeriod=p;btn.closest('.period-bar').querySelectorAll('.pbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderAll();}
+function setChartPeriod(btn,p){
+  chartPeriod=p;
+  btn.closest('.period-bar').querySelectorAll('.pbtn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  // 清除歷史快取，以符合新時間區間
+  historyPrices={}; historyFX={};
+  renderAll();
+  fetchAndRenderHistory();
+}
 function setDim(btn,d){dim=d;document.querySelectorAll('.dbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderAll();}
 function toggleRename(){const b=document.getElementById('rename-bar');b.style.display=b.style.display==='none'?'block':'none';}
 function applyRename(){
@@ -1520,4 +1651,4 @@ function applyRename(){
 loadData();
 checkAutoDeduct();
 renderAll();
-fetchAll();
+fetchAll(); // fetchAll 完成後會自動呼叫 fetchAndRenderHistory

@@ -158,6 +158,37 @@ export default async function handler(req, res) {
       const nav = parseFloat(found.navValue) || 0;
       res.json({ nav, navDate: found.navTxnDate || '' });
 
+    } else if (type === 'history') {
+      // 股票/ETF/黃金/匯率歷史收盤價，range: 1mo | ytd | max
+      const range = req.query.range || '1mo';
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${range}`;
+      const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' } });
+      const d = await r.json();
+      const result = d?.chart?.result?.[0];
+      if (!result) { res.status(404).json({ error: 'no data' }); return; }
+      const timestamps = result.timestamp || [];
+      const closes = result.indicators?.quote?.[0]?.close || [];
+      const data = timestamps
+        .map((ts, i) => ({ date: new Date(ts * 1000).toISOString().split('T')[0], close: closes[i] }))
+        .filter(item => item.close != null);
+      res.json({ data });
+
+    } else if (type === 'crypto_history') {
+      // CoinGecko 加密貨幣歷史價格，symbol = coingecko id，days: 30 | 365 | max
+      const days = req.query.days || '30';
+      const url = `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(symbol)}/market_chart?vs_currency=usd&days=${days}&interval=daily`;
+      const r = await fetch(url);
+      const d = await r.json();
+      const map = {};
+      (d?.prices || []).forEach(([ts, price]) => {
+        const date = new Date(ts).toISOString().split('T')[0];
+        map[date] = price;
+      });
+      const data = Object.entries(map)
+        .map(([date, close]) => ({ date, close }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+      res.json({ data });
+
     } else {
       res.status(400).json({ error: 'unknown type' });
     }
