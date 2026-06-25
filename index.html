@@ -526,6 +526,21 @@
   </div>
 </div>
 
+<!-- 島史片段 Modal -->
+<div id="game-history-modal-overlay" class="modal-overlay" style="display:none" onclick="gameHistoryOverlayClick(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">
+      <span>島史新增片段</span>
+      <button class="close-btn" onclick="closeGameHistoryModal()"><i class="ti ti-x"></i></button>
+    </div>
+    <div id="game-history-list"></div>
+    <div class="btn-row">
+      <button class="btn-primary" onclick="markGameHistorySeen()">收進島史</button>
+      <button class="btn-secondary" onclick="closeGameHistoryModal()">稍後再看</button>
+    </div>
+  </div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>

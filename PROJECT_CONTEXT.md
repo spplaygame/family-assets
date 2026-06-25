@@ -96,6 +96,7 @@
   - 完成建檔後第一筆配息。
   - 完成建檔後累積 3 個不同紀錄日期。
 - 首頁新增「島嶼居民」摘要卡，顯示已解鎖居民數、最近三個成就與目前進度。
+- 新增「島史新增片段」查看 modal，可把新紀錄 / 補登資料收進島史並清除提示。
 - 此版本仍不做大型圖鑑、動畫播放或成就重算機制。
 
 下一個視窗請先執行檢查：
@@ -138,6 +139,7 @@ rg -n "game-setup-card|f-cash-date|d-start-date|APP_SCHEMA_VERSION|gameState|com
 - `completeInitialSetup()`
 - `renderGameSetupCard()`
 - `renderGameAchievementCard()`：首頁島嶼居民摘要。
+- `openGameHistoryModal()` / `markGameHistorySeen()`：查看並收起島史新增片段。
 - `renderAll()` 已呼叫 `renderGameSetupCard()` 與 `renderGameAchievementCard()`。
 
 `index.html` 已加入 `game-setup-card` 容器，`renderGameSetupCard()` 會在首頁顯示初始建檔或島史新增片段狀態。

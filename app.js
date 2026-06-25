@@ -102,6 +102,9 @@ const toTWD = (v,c) => c==='USD'?v*fx.usd.rate:c==='GBP'?v*fx.gbp.rate:v;
 function eventDate(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value||'') ? value : todayStr();
 }
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
 function ensureDataSchema() {
   const now = new Date().toISOString();
   assets.forEach(a => {
@@ -662,13 +665,68 @@ function renderGameSetupCard() {
     el.className = 'game-setup-card complete';
     el.innerHTML = '<div class="game-setup-icon">📖</div>'
       +'<div class="game-setup-content"><div class="game-setup-title">島嶼歷史新增了 '+pending+' 頁</div>'
-      +'<div class="game-setup-sub">補登資料已加入正確年份；下一階段會提供新增片段與完整前傳播放。</div></div>';
+      +'<div class="game-setup-sub">新紀錄與補登資料已排進時間線，可先查看片段再收進島史。</div></div>'
+      +'<button class="btn-primary game-setup-action" onclick="openGameHistoryModal()">查看片段</button>';
   } else {
     el.className = 'game-setup-card complete';
     el.innerHTML = '<div class="game-setup-icon">🌱</div>'
       +'<div class="game-setup-content"><div class="game-setup-title">島嶼起始基準已建立</div>'
       +'<div class="game-setup-sub">完成於 '+gameState.onboarding.completedAt.slice(0,10)+'，新的財務事件將從這裡開始養成。</div></div>';
   }
+}
+
+function pendingGameHistoryEvents() {
+  return (gameState.historyEvents||[])
+    .filter(e=>e.pendingAnimation)
+    .sort((a,b)=>a.effectiveDate.localeCompare(b.effectiveDate)||a.id.localeCompare(b.id));
+}
+
+function formatGameEvent(e) {
+  const labels = {
+    asset_created:'新增資產',
+    debt_started:'新增負債',
+    dividend_received:'收到配息',
+    sell:'賣出紀錄',
+    transaction:'交易紀錄',
+  };
+  const source = e.source==='backfill' ? '補登舊資料' : '新紀錄';
+  return {
+    title:labels[e.kind]||labels[e.action]||'財務事件',
+    source,
+    detail:e.label||'未命名事件',
+  };
+}
+
+function openGameHistoryModal() {
+  const overlay = document.getElementById('game-history-modal-overlay');
+  const list = document.getElementById('game-history-list');
+  if(!overlay || !list) return;
+  const events = pendingGameHistoryEvents();
+  list.innerHTML = events.length ? events.map(e=>{
+    const item = formatGameEvent(e);
+    return '<div class="history-fragment">'
+      +'<div class="history-date">'+escapeHtml(e.effectiveDate)+'</div>'
+      +'<div class="history-body"><div class="history-title">'+escapeHtml(item.title)+'</div>'
+      +'<div class="history-sub">'+escapeHtml(item.detail)+' · '+escapeHtml(item.source)+'</div></div>'
+      +'</div>';
+  }).join('') : '<div class="game-empty-note">目前沒有待查看的島史片段。</div>';
+  overlay.style.display = 'flex';
+}
+
+function closeGameHistoryModal() {
+  const overlay = document.getElementById('game-history-modal-overlay');
+  if(overlay) overlay.style.display = 'none';
+}
+
+function gameHistoryOverlayClick(e) {
+  if(e.target===document.getElementById('game-history-modal-overlay')) closeGameHistoryModal();
+}
+
+function markGameHistorySeen() {
+  gameState.historyEvents = (gameState.historyEvents||[]).map(e=>e.pendingAnimation ? {...e, pendingAnimation:false} : e);
+  saveData();
+  closeGameHistoryModal();
+  renderAll();
 }
 
 function renderGameAchievementCard() {

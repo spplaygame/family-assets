@@ -110,6 +110,10 @@ textarea{resize:vertical;min-height:52px}
 .game-progress-grid div{background:var(--bg2);border-radius:var(--radius);padding:7px 8px;border:1px solid var(--border)}
 .game-progress-grid span{display:block;font-size:10px;color:var(--text2);margin-bottom:2px}
 .game-progress-grid b{display:block;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.history-fragment{display:grid;grid-template-columns:74px 1fr;gap:10px;align-items:flex-start;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:8px}
+.history-date{font-size:11px;font-weight:700;color:var(--accent)}
+.history-title{font-size:13px;font-weight:700;color:var(--text)}
+.history-sub{font-size:11px;color:var(--text2);line-height:1.5;margin-top:2px}
 .donut-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.25rem;margin-bottom:1.25rem;}
 .dim-bar{display:flex;gap:4px}
 .dbtn{padding:4px 12px;font-size:12px;font-weight:500;border:1px solid var(--border2);border-radius:20px;cursor:pointer;background:none;color:var(--text2);}
