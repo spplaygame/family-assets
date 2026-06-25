@@ -1,4 +1,5 @@
 const API = '/api/quote';
+const APP_SCHEMA_VERSION = 2;
 
 // 資產類別定義
 const CATS = {
@@ -70,6 +71,22 @@ let historyPrices = {}; // { 'AAPL': {'2026-01-15': 210, ...}, 'crypto_BTC': {..
 let historyFX = {};     // { 'USDTWD': {'2026-01-15': 32.5, ...}, 'GBPUSD': {...} }
 let historyFetching = false;
 
+function makeId(prefix) {
+  if(globalThis.crypto?.randomUUID) return prefix+'_'+crypto.randomUUID();
+  return prefix+'_'+Date.now()+'_'+Math.random().toString(36).slice(2,10);
+}
+function createDefaultGameState() {
+  return {
+    version: 1,
+    onboarding: {status:'draft', startedAt:new Date().toISOString(), completedAt:null},
+    baseline: null,
+    achievements: [],
+    historyEvents: [],
+    monsterProfiles: {},
+  };
+}
+let gameState = createDefaultGameState();
+
 const todayStr = () => new Date().toISOString().split('T')[0];
 const PCT = v => (v>=0?'+':'')+v.toFixed(2)+'%';
 const CLS = v => v>=0?'pos':'neg';
@@ -82,8 +99,103 @@ const fmtCur = (v,c) => {
 };
 const toTWD = (v,c) => c==='USD'?v*fx.usd.rate:c==='GBP'?v*fx.gbp.rate:v;
 
+function eventDate(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value||'') ? value : todayStr();
+}
+function ensureDataSchema() {
+  const now = new Date().toISOString();
+  assets.forEach(a => {
+    a.id = a.id || makeId('asset');
+    a.effectiveDate = eventDate(a.effectiveDate || a.buyDate);
+    a.buyDate = a.buyDate || a.effectiveDate;
+    a.recordedAt = a.recordedAt || now;
+    if(!['twd_cash','usd_cash','real_estate'].includes(a.type) && a.sharesRemaining==null) {
+      a.sharesRemaining = a.shares || a.qty || 0;
+    }
+  });
+  debts.forEach(d => {
+    d.id = d.id || makeId('debt');
+    d.startDate = eventDate(d.startDate || d.effectiveDate);
+    d.effectiveDate = d.startDate;
+    d.recordedAt = d.recordedAt || now;
+  });
+  dividends.forEach(d => {
+    d.id = d.id || makeId('dividend');
+    d.effectiveDate = eventDate(d.effectiveDate || d.date);
+    d.date = d.date || d.effectiveDate;
+    d.recordedAt = d.recordedAt || now;
+  });
+  transactions.forEach(t => {
+    t.id = t.id || makeId('transaction');
+    t.effectiveDate = eventDate(t.effectiveDate || t.date);
+    t.date = t.date || t.effectiveDate;
+    t.recordedAt = t.recordedAt || now;
+  });
+  gameState = {...createDefaultGameState(), ...(gameState||{})};
+  gameState.onboarding = {...createDefaultGameState().onboarding, ...(gameState.onboarding||{})};
+  gameState.achievements = Array.isArray(gameState.achievements) ? gameState.achievements : [];
+  gameState.historyEvents = Array.isArray(gameState.historyEvents) ? gameState.historyEvents : [];
+  gameState.monsterProfiles = gameState.monsterProfiles || {};
+}
+
+function collectFinancialEvents() {
+  const result = [];
+  assets.forEach(a => result.push({
+    id:'event_asset_'+a.id, entityId:a.id, kind:'asset_created',
+    effectiveDate:eventDate(a.effectiveDate||a.buyDate), recordedAt:a.recordedAt,
+    owner:a.owner||'me', assetType:a.type,
+    label:a.name||a.ticker||a.address||a.note||CATS[a.type]?.label||'資產',
+  }));
+  debts.forEach(d => result.push({
+    id:'event_debt_'+d.id, entityId:d.id, kind:'debt_started',
+    effectiveDate:eventDate(d.startDate||d.effectiveDate), recordedAt:d.recordedAt,
+    owner:d.owner||'me', debtType:d.debtType,
+    label:d.name||DEBT_TYPES[d.debtType]?.label||'負債',
+  }));
+  dividends.forEach(d => result.push({
+    id:'event_dividend_'+d.id, entityId:d.id, kind:'dividend_received',
+    effectiveDate:eventDate(d.effectiveDate||d.date), recordedAt:d.recordedAt,
+    owner:d.owner||null, label:d.sourceName||'配息', amount:d.amount||0, currency:d.currency||'TWD',
+  }));
+  transactions.forEach(t => result.push({
+    id:'event_transaction_'+t.id, entityId:t.id, kind:t.action||'transaction',
+    effectiveDate:eventDate(t.effectiveDate||t.date), recordedAt:t.recordedAt,
+    owner:t.owner||'me', label:t.name||t.ticker||'交易',
+  }));
+  return result.sort((a,b)=>a.effectiveDate.localeCompare(b.effectiveDate)||a.id.localeCompare(b.id));
+}
+
+function syncGameHistoryEvents() {
+  const existing = new Map((gameState.historyEvents||[]).map(e=>[e.id,e]));
+  const completedDate = gameState.onboarding.completedAt?.slice(0,10) || null;
+  gameState.historyEvents = collectFinancialEvents().map(event => {
+    const old = existing.get(event.id);
+    if(old) return {...old, ...event, source:old.source, rewardEligible:old.rewardEligible, pendingAnimation:old.pendingAnimation};
+    const source = gameState.onboarding.status!=='complete'
+      ? 'initial_archive'
+      : event.effectiveDate < completedDate ? 'backfill' : 'live';
+    return {
+      ...event,
+      source,
+      rewardEligible:source==='live',
+      pendingAnimation:source!=='initial_archive',
+      addedToHistoryAt:new Date().toISOString(),
+    };
+  });
+}
+
+function unlockAchievement({id, scope, title, metricValue=0, source='live'}) {
+  if(!id || gameState.achievements.some(a=>a.id===id)) return false;
+  gameState.achievements.push({
+    id, scope, title, metricValue, source,
+    unlockedAt:new Date().toISOString(),
+  });
+  return true;
+}
+
 // 儲存 / 載入
 function saveData() {
+  syncGameHistoryEvents();
   localStorage.setItem('family_assets', JSON.stringify(assets));
   localStorage.setItem('family_names', JSON.stringify(names));
   localStorage.setItem('family_debts', JSON.stringify(debts));
@@ -91,6 +203,8 @@ function saveData() {
   localStorage.setItem('family_members', JSON.stringify(familyMembers));
   localStorage.setItem('family_dividends', JSON.stringify(dividends));
   localStorage.setItem('family_transactions', JSON.stringify(transactions));
+  localStorage.setItem('family_game_state', JSON.stringify(gameState));
+  localStorage.setItem('family_schema_version', String(APP_SCHEMA_VERSION));
 }
 function loadData() {
   try {
@@ -107,6 +221,11 @@ function loadData() {
     if(dv) dividends = JSON.parse(dv);
     const tx = localStorage.getItem('family_transactions');
     if(tx) transactions = JSON.parse(tx);
+    const gs = localStorage.getItem('family_game_state');
+    if(gs) gameState = JSON.parse(gs);
+    ensureDataSchema();
+    syncGameHistoryEvents();
+    if(Number(localStorage.getItem('family_schema_version')||0) < APP_SCHEMA_VERSION) saveData();
     if(n)  { names = JSON.parse(n); updateNameLabels(); }
     applyTheme(localStorage.getItem('theme') || 'arctic');
     updateDebtToggleUI();
@@ -397,6 +516,85 @@ function getAllFiltered() {
     : assets.filter(a=>a.owner===profile);
 }
 
+function getScopeMetrics(scope) {
+  const scopedAssets = scope==='family'
+    ? assets.filter(a=>familyMembers[a.owner]!==false)
+    : assets.filter(a=>a.owner===scope);
+  const scopedDebts = scope==='family'
+    ? debts.filter(d=>familyMembers[d.owner]!==false)
+    : debts.filter(d=>d.owner===scope);
+  const totalAssets = scopedAssets.reduce((s,a)=>s+assetValTWD(a),0);
+  const totalDebt = scopedDebts.reduce((s,d)=>s+debtToTWD(d),0);
+  return {
+    totalAssets:Math.round(totalAssets),
+    totalDebt:Math.round(totalDebt),
+    netWorth:Math.round(totalAssets-totalDebt),
+    assetCount:scopedAssets.length,
+    debtCount:scopedDebts.length,
+    assetTypes:[...new Set(scopedAssets.map(a=>a.type))],
+  };
+}
+
+function completeInitialSetup() {
+  if(gameState.onboarding.status==='complete') return;
+  if(!assets.length && !debts.length) {
+    alert('請先建立至少一筆資產或負債，再完成初始建檔。');
+    return;
+  }
+  if(!confirm('完成後會以目前資料作為養成起點。未來仍可補登舊資料，且不會重複發放獎勵。確定完成建檔？')) return;
+  syncGameHistoryEvents();
+  const completedAt = new Date().toISOString();
+  gameState.onboarding.status = 'complete';
+  gameState.onboarding.completedAt = completedAt;
+  gameState.baseline = {
+    capturedAt:completedAt,
+    fx:{usd:fx.usd.rate,gbp:fx.gbp.rate},
+    me:getScopeMetrics('me'),
+    wife:getScopeMetrics('wife'),
+    family:getScopeMetrics('family'),
+  };
+  gameState.historyEvents = gameState.historyEvents.map(e=>({
+    ...e,
+    source:'initial_archive',
+    rewardEligible:false,
+    pendingAnimation:false,
+  }));
+  unlockAchievement({
+    id:'initial_archive_complete', scope:'family', title:'完成初始建檔',
+    metricValue:gameState.baseline.family.totalAssets, source:'initial_archive',
+  });
+  saveData();
+  renderAll();
+  alert('初始建檔完成！你的島嶼起始基準已保存。');
+}
+
+function renderGameSetupCard() {
+  const el = document.getElementById('game-setup-card');
+  if(!el) return;
+  const events = collectFinancialEvents();
+  const oldest = events[0]?.effectiveDate || '尚未建立資料';
+  if(gameState.onboarding.status!=='complete') {
+    el.className = 'game-setup-card';
+    el.innerHTML = '<div class="game-setup-icon">🏝️</div>'
+      +'<div class="game-setup-content"><div class="game-setup-title">正在建立你的島嶼歷史</div>'
+      +'<div class="game-setup-sub">已整理 '+events.length+' 筆事件'+(events.length?' · 最早可追溯至 '+oldest:'')+'。可以分幾天補登，準備好再完成。</div></div>'
+      +'<button class="btn-primary game-setup-action" onclick="completeInitialSetup()">完成初始建檔</button>';
+    return;
+  }
+  const pending = (gameState.historyEvents||[]).filter(e=>e.pendingAnimation).length;
+  if(pending>0) {
+    el.className = 'game-setup-card complete';
+    el.innerHTML = '<div class="game-setup-icon">📖</div>'
+      +'<div class="game-setup-content"><div class="game-setup-title">島嶼歷史新增了 '+pending+' 頁</div>'
+      +'<div class="game-setup-sub">補登資料已加入正確年份；下一階段會提供新增片段與完整前傳播放。</div></div>';
+  } else {
+    el.className = 'game-setup-card complete';
+    el.innerHTML = '<div class="game-setup-icon">🌱</div>'
+      +'<div class="game-setup-content"><div class="game-setup-title">島嶼起始基準已建立</div>'
+      +'<div class="game-setup-sub">完成於 '+gameState.onboarding.completedAt.slice(0,10)+'，新的財務事件將從這裡開始養成。</div></div>';
+  }
+}
+
 // 合併同 ticker
 function groupAssets(all) {
   const map = {};
@@ -411,6 +609,7 @@ function groupAssets(all) {
 
 // 渲染首頁
 function renderAll() {
+  renderGameSetupCard();
   const all = getAllFiltered();
   const totalAssets = all.reduce((s,a)=>s+assetValTWD(a),0);
   const debtTotal   = includeDebt ? totalDebtTWD() : 0;
@@ -905,7 +1104,7 @@ function submitSell() {
   const fxRate = cur==='USD' ? fx.usd.rate : cur==='GBP' ? fx.gbp.rate : 1;
 
   const record = {
-    id: 'tx_sell_'+Date.now(), action:'sell', date,
+    id: makeId('transaction'), action:'sell', date, effectiveDate:eventDate(date), recordedAt:new Date().toISOString(),
     ticker: detailAsset.ticker, name: detailAsset.name||detailAsset.ticker,
     type: detailAsset.type, owner: detailAsset.items[0]?.owner||'me', currency: cur,
     shares, sellPrice: price, grossProceeds, sellFee: fee, transactionTax: tax,
@@ -991,7 +1190,11 @@ function submitDividend() {
   const currency = document.getElementById('div-currency').value;
   const sourceName = detailAsset.name||detailAsset.ticker||detailAsset.key;
 
-  const record = {id:Date.now(), date, amount, currency, sourceKey:detailAsset.key, sourceName, destination:divDest};
+  const record = {
+    id:makeId('dividend'), date, effectiveDate:eventDate(date), recordedAt:new Date().toISOString(),
+    amount, currency, sourceKey:detailAsset.key, sourceName, destination:divDest,
+    owner:detailAsset.items?.[0]?.owner||null
+  };
 
   if(divDest === 'cash') {
     const cashIdx = parseInt(document.getElementById('div-cash-account').value);
@@ -1015,14 +1218,16 @@ function submitDividend() {
     const ttype = tg.type;
     let newPos;
     if(ttype==='tw_fund') {
-      newPos = {type:ttype,fundCode:fi?.fundCode||'',name:tg.name,shares,cost:price,fee,price:fi?.price||price,prevPrice:fi?.prevPrice||price,currency:fi?.currency||'TWD',owner:fi?.owner||'me',buyDate:date,priceSource:''};
+      newPos = {type:ttype,fundCode:fi?.fundCode||'',name:tg.name,shares,cost:price,fee,price:fi?.price||price,prevPrice:fi?.prevPrice||price,currency:fi?.currency||'TWD',owner:fi?.owner||'me',buyDate:date,effectiveDate:eventDate(date),recordedAt:new Date().toISOString(),priceSource:''};
     } else if(ttype==='crypto') {
-      newPos = {type:ttype,ticker:tg.ticker,qty:shares,cost:price,fee,price:fi?.price||price,prevPrice:fi?.prevPrice||price,owner:fi?.owner||'me',buyDate:date,note:'配息再投入',priceSource:''};
+      newPos = {type:ttype,ticker:tg.ticker,qty:shares,cost:price,fee,price:fi?.price||price,prevPrice:fi?.prevPrice||price,owner:fi?.owner||'me',buyDate:date,effectiveDate:eventDate(date),recordedAt:new Date().toISOString(),note:'配息再投入',priceSource:''};
     } else if(ttype==='gold') {
-      newPos = {type:ttype,qty:shares,cost:price,fee,price:fi?.price||price,prevPrice:fi?.prevPrice||price,owner:fi?.owner||'me',buyDate:date,note:'配息再投入',priceSource:''};
+      newPos = {type:ttype,qty:shares,cost:price,fee,price:fi?.price||price,prevPrice:fi?.prevPrice||price,owner:fi?.owner||'me',buyDate:date,effectiveDate:eventDate(date),recordedAt:new Date().toISOString(),note:'配息再投入',priceSource:''};
     } else {
-      newPos = {type:ttype,ticker:tg.ticker,name:tg.name,shares,cost:price,fee,feeType:'manual',feePct:fi?.feePct||0.1425,feeManual:fee,price:fi?.price||price,prevPrice:fi?.prevPrice||price,owner:fi?.owner||'me',buyDate:date,note:'配息再投入',priceSource:''};
+      newPos = {type:ttype,ticker:tg.ticker,name:tg.name,shares,cost:price,fee,feeType:'manual',feePct:fi?.feePct||0.1425,feeManual:fee,price:fi?.price||price,prevPrice:fi?.prevPrice||price,owner:fi?.owner||'me',buyDate:date,effectiveDate:eventDate(date),recordedAt:new Date().toISOString(),note:'配息再投入',priceSource:''};
     }
+    newPos.id = makeId('asset');
+    newPos.sharesRemaining = newPos.shares || newPos.qty || 0;
     assets.push(newPos);
     record.targetKey = targetKey;
     record.targetTicker = tg.ticker;
@@ -1194,6 +1399,7 @@ function openEditModal(idx) {
     document.getElementById('cash-lbl').textContent='金額（'+(CATS[a.type]||{cur:'TWD'}).cur+'）';
     document.getElementById('f-cash-amt').value = a.amt||'';
     document.getElementById('f-cash-owner').value = a.owner||'me';
+    document.getElementById('f-cash-date').value = a.effectiveDate||a.buyDate||todayStr();
     document.getElementById('f-cash-note').value = a.note||'';
   } else if(isFund) {
     document.getElementById('f-fund-search').value = a.name||'';
@@ -1298,8 +1504,7 @@ function pickType(t, resetCurrency=true) {
   ['f-price','f-cry-price'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   ['price-status','cry-price-status'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='';});
   document.getElementById('ac-dropdown').style.display='none';
-  if(!document.getElementById('f-date').value) document.getElementById('f-date').value=todayStr();
-  if(!document.getElementById('f-cry-date').value) document.getElementById('f-cry-date').value=todayStr();
+  ['f-date','f-cash-date','f-fund-date','f-cry-date','f-re-date','f-gold-date'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=todayStr();});
   updateFeeUI();
 }
 function updateFeeUI() {
@@ -1325,10 +1530,12 @@ function calcFee() {
 function submitAsset() {
   const t = selType;
   const today = todayStr();
+  const existing = editIndex>=0 ? assets[editIndex] : null;
   let obj;
   if(['twd_cash','usd_cash'].includes(t)) {
     const amt=parseFloat(document.getElementById('f-cash-amt').value)||0; if(!amt) return;
-    obj={type:t,amt,note:document.getElementById('f-cash-note').value,owner:document.getElementById('f-cash-owner').value};
+    const cashDate = document.getElementById('f-cash-date').value||today;
+    obj={type:t,amt,note:document.getElementById('f-cash-note').value,owner:document.getElementById('f-cash-owner').value,buyDate:cashDate,effectiveDate:eventDate(cashDate)};
   } else if(t==='tw_fund') {
     const code=document.getElementById('f-fund-code').value.trim();
     const name=document.getElementById('f-fund-name').value.trim();
@@ -1372,10 +1579,14 @@ function submitAsset() {
     if(!ticker||!shares||!cost) return;
     obj={type:t,ticker,name,shares,cost,price:price||cost,prevPrice:prevPrice||price||cost,fee,feeType,feePct,feeManual,owner:document.getElementById('f-owner').value,buyDate:document.getElementById('f-date').value||today,note:document.getElementById('f-note').value,priceSource:price?'live':''};
   }
-  // 非現金/不動產資產加上唯一 ID 與剩餘持倉數量（供 FIFO 賣出使用）
+  obj.id = existing?.id || obj.id || makeId('asset');
+  obj.recordedAt = existing?.recordedAt || new Date().toISOString();
+  obj.effectiveDate = eventDate(obj.effectiveDate || obj.buyDate);
+  if(!obj.buyDate) obj.buyDate = obj.effectiveDate;
+  // 非現金/不動產資產加上剩餘持倉數量（供 FIFO 賣出使用）
   if(!['twd_cash','usd_cash','real_estate'].includes(obj.type)) {
-    obj.id = obj.id || ('lot_'+Date.now()+'_'+Math.random().toString(36).substr(2,5));
-    obj.sharesRemaining = obj.shares || obj.qty || 0;
+    const totalUnits = obj.shares || obj.qty || 0;
+    obj.sharesRemaining = existing?.sharesRemaining!=null ? Math.min(existing.sharesRemaining, totalUnits) : totalUnits;
   }
   if(editIndex>=0) assets[editIndex]=obj; else assets.push(obj);
   rebalRows=[]; saveData(); closeModal(); renderAll();
@@ -1396,6 +1607,7 @@ function openDebtModal() {
   document.getElementById('d-type').value='mortgage';
   document.getElementById('d-currency').value='TWD';
   document.getElementById('d-owner').value='me';
+  document.getElementById('d-start-date').value=todayStr();
   document.getElementById('d-pay-day-input').value='25';
   document.getElementById('d-pay-day-mid-input').value='25';
   document.getElementById('d-method').value='equal';
@@ -1414,6 +1626,7 @@ function openDebtEditModal(idx) {
   document.getElementById('d-currency').value=d.currency||'TWD';
   document.getElementById('d-name').value=d.name||'';
   document.getElementById('d-owner').value=d.owner||'me';
+  document.getElementById('d-start-date').value=d.startDate||d.effectiveDate||todayStr();
   document.getElementById('d-note').value=d.note||'';
   const mode=d.mode||'mid'; setDebtMode(mode);
   if(mode==='new') {
@@ -1473,7 +1686,9 @@ function submitDebt() {
   const name=document.getElementById('d-name').value.trim();
   const owner=document.getElementById('d-owner').value;
   const note=document.getElementById('d-note').value;
-  let obj={debtType,currency,name,owner,note,mode:debtMode};
+  const existing = debtEditIndex>=0 ? debts[debtEditIndex] : null;
+  const startDate=eventDate(document.getElementById('d-start-date').value||todayStr());
+  let obj={debtType,currency,name,owner,note,mode:debtMode,startDate,effectiveDate:startDate,id:existing?.id||makeId('debt'),recordedAt:existing?.recordedAt||new Date().toISOString()};
   if(debtMode==='new') {
     const principal=parseFloat(document.getElementById('d-principal').value)||0; if(!principal) return;
     obj.principal=principal; obj.remaining=principal;

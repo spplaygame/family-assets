@@ -16,6 +16,7 @@
     <button class="profile-btn" onclick="setProfile('wife')" id="pb-wife"><span id="lbl-wife">太太的資產</span></button>
     <button class="profile-btn" onclick="setProfile('family')" id="pb-family">總資產</button>
   </div>
+  <div id="game-setup-card" class="game-setup-card"></div>
   <div class="rate-bar">
     <span style="font-weight:600"><i class="ti ti-currency-exchange" style="font-size:13px;vertical-align:-2px"></i> 匯率</span>
     <span>USD/TWD <span class="rate-val" id="r-usd">—</span> <span id="rc-usd"></span></span>
@@ -258,6 +259,10 @@
           <div><label id="cash-lbl">金額（TWD）</label><input id="f-cash-amt" type="number" placeholder="500000"></div>
           <div><label>歸屬</label><select id="f-cash-owner"><option value="me">我</option><option value="wife">太太</option></select></div>
         </div>
+        <div class="frow">
+          <div><label>建立／開始持有日期</label><input id="f-cash-date" type="date"></div>
+          <div></div>
+        </div>
         <div><label>備註</label><textarea id="f-cash-note" rows="2" placeholder="活存、定存…"></textarea></div>
       </div>
 
@@ -376,6 +381,10 @@
     <div class="frow">
       <div><label>名稱</label><input id="d-name" type="text" placeholder="如：彰化銀行房貸"></div>
       <div><label>歸屬</label><select id="d-owner"><option value="me">我</option><option value="wife">太太</option></select></div>
+    </div>
+    <div class="frow">
+      <div><label>負債開始日期</label><input id="d-start-date" type="date"></div>
+      <div></div>
     </div>
     <div class="sec-div">
       <div class="sec-label">還款計畫</div>
