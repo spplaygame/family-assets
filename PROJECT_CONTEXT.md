@@ -79,12 +79,24 @@
 
 ## 目前工作狀態
 
-目前本機工作區有未提交修改：
+目前 `main` 已推送到 GitHub，最新完成：
 
 - `app.js` 已加入初始建檔 / 島嶼前傳資料地基，並完成表單資料接線。
 - `index.html` 已加入首頁初始建檔卡片容器、現金開始持有日期、負債開始日期欄位。
 - `style.css` 已加入初始建檔卡片樣式。
 - `.claude/` 是未追蹤資料夾，不要加入 git。
+
+本輪接續開發「第一版里程碑 / 島嶼居民」：
+
+- 完成初始建檔後，只有 `rewardEligible` 的 live 事件會推進里程碑。
+- 新增第一版成就判斷：
+  - 完成建檔後第一筆新事件。
+  - 家庭淨值相對 baseline 成長 1 萬元。
+  - 完成建檔後新增新的資產類型。
+  - 完成建檔後第一筆配息。
+  - 完成建檔後累積 3 個不同紀錄日期。
+- 首頁新增「島嶼居民」摘要卡，顯示已解鎖居民數、最近三個成就與目前進度。
+- 此版本仍不做大型圖鑑、動畫播放或成就重算機制。
 
 下一個視窗請先執行檢查：
 
@@ -101,7 +113,7 @@ rg -n "game-setup-card|f-cash-date|d-start-date|APP_SCHEMA_VERSION|gameState|com
 
 目前 `app.js` 已經開始加入「初始建檔 / 島嶼前傳」資料地基，內容大致包含：
 
-- `APP_SCHEMA_VERSION = 2`
+- `APP_SCHEMA_VERSION = 3`
 - `makeId(prefix)`：產生穩定 ID。
 - `createDefaultGameState()`：建立遊戲狀態。
 - `let gameState = createDefaultGameState()`
@@ -117,6 +129,7 @@ rg -n "game-setup-card|f-cash-date|d-start-date|APP_SCHEMA_VERSION|gameState|com
   - `backfill`
   - `live`
 - `unlockAchievement(...)`
+- `getGameProgress()` / `evaluateGameAchievements()`：第一版里程碑判斷。
 - `saveData()` 已開始儲存：
   - `family_game_state`
   - `family_schema_version`
@@ -124,7 +137,8 @@ rg -n "game-setup-card|f-cash-date|d-start-date|APP_SCHEMA_VERSION|gameState|com
 - `getScopeMetrics(scope)`
 - `completeInitialSetup()`
 - `renderGameSetupCard()`
-- `renderAll()` 已嘗試呼叫 `renderGameSetupCard()`。
+- `renderGameAchievementCard()`：首頁島嶼居民摘要。
+- `renderAll()` 已呼叫 `renderGameSetupCard()` 與 `renderGameAchievementCard()`。
 
 `index.html` 已加入 `game-setup-card` 容器，`renderGameSetupCard()` 會在首頁顯示初始建檔或島史新增片段狀態。
 

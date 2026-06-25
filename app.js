@@ -1,5 +1,5 @@
 const API = '/api/quote';
-const APP_SCHEMA_VERSION = 2;
+const APP_SCHEMA_VERSION = 3;
 
 // 資產類別定義
 const CATS = {
@@ -193,9 +193,85 @@ function unlockAchievement({id, scope, title, metricValue=0, source='live'}) {
   return true;
 }
 
+function liveHistoryEvents() {
+  return (gameState.historyEvents||[]).filter(e=>e.rewardEligible);
+}
+
+function getGameProgress() {
+  if(gameState.onboarding.status!=='complete' || !gameState.baseline) {
+    return {
+      status:'draft',
+      achievements:gameState.achievements||[],
+      liveEvents:0,
+      familyGrowth:0,
+      addedAssetTypes:0,
+      dividendEvents:0,
+      recordDays:0,
+    };
+  }
+  const familyNow = getScopeMetrics('family');
+  const baselineFamily = gameState.baseline.family || {};
+  const baselineTypes = new Set(baselineFamily.assetTypes||[]);
+  const currentTypes = new Set(familyNow.assetTypes||[]);
+  const liveEvents = liveHistoryEvents();
+  const recordDays = new Set(liveEvents.map(e=>e.effectiveDate)).size;
+  const dividendEvents = liveEvents.filter(e=>e.kind==='dividend_received').length;
+  const addedAssetTypes = [...currentTypes].filter(t=>!baselineTypes.has(t)).length;
+  return {
+    status:'complete',
+    achievements:gameState.achievements||[],
+    liveEvents:liveEvents.length,
+    familyGrowth:familyNow.netWorth - (baselineFamily.netWorth||0),
+    addedAssetTypes,
+    dividendEvents,
+    recordDays,
+  };
+}
+
+function evaluateGameAchievements() {
+  if(gameState.onboarding.status!=='complete' || !gameState.baseline) return;
+  const progress = getGameProgress();
+  const checks = [
+    {
+      ok: progress.liveEvents >= 1,
+      id:'first_live_event',
+      title:'第一位新居民報到',
+      value:progress.liveEvents,
+    },
+    {
+      ok: progress.familyGrowth >= 10000,
+      id:'net_growth_10k',
+      title:'島嶼長出第一片新地',
+      value:progress.familyGrowth,
+    },
+    {
+      ok: progress.addedAssetTypes >= 1,
+      id:'asset_type_added_after_baseline',
+      title:'探索新的資產棲地',
+      value:progress.addedAssetTypes,
+    },
+    {
+      ok: progress.dividendEvents >= 1,
+      id:'first_dividend_after_baseline',
+      title:'第一顆果實成熟',
+      value:progress.dividendEvents,
+    },
+    {
+      ok: progress.recordDays >= 3,
+      id:'record_days_3',
+      title:'三天島務日誌',
+      value:progress.recordDays,
+    },
+  ];
+  checks.forEach(c => {
+    if(c.ok) unlockAchievement({id:c.id, scope:'family', title:c.title, metricValue:c.value, source:'live'});
+  });
+}
+
 // 儲存 / 載入
 function saveData() {
   syncGameHistoryEvents();
+  evaluateGameAchievements();
   localStorage.setItem('family_assets', JSON.stringify(assets));
   localStorage.setItem('family_names', JSON.stringify(names));
   localStorage.setItem('family_debts', JSON.stringify(debts));
@@ -595,6 +671,44 @@ function renderGameSetupCard() {
   }
 }
 
+function renderGameAchievementCard() {
+  const el = document.getElementById('game-achievement-card');
+  if(!el) return;
+  const progress = getGameProgress();
+  const achievements = [...(progress.achievements||[])].sort((a,b)=>(b.unlockedAt||'').localeCompare(a.unlockedAt||''));
+  if(progress.status!=='complete') {
+    el.innerHTML = '<div class="game-achievement-head"><div><div class="game-achievement-title">島嶼居民</div>'
+      +'<div class="game-achievement-sub">完成初始建檔後，新的紀錄才會開始解鎖居民與里程碑。</div></div>'
+      +'<div class="game-achievement-count">0</div></div>';
+    return;
+  }
+  const recent = achievements.slice(0,3);
+  const cards = recent.length ? recent.map(a=>
+    '<div class="resident-chip"><span class="resident-icon">'+achievementIcon(a.id)+'</span>'
+    +'<span><b>'+a.title+'</b><small>'+((a.unlockedAt||'').slice(0,10)||'')+'</small></span></div>'
+  ).join('') : '<div class="game-empty-note">還沒有新居民。新增完成建檔後的紀錄，就會從這裡開始。</div>';
+  el.innerHTML = '<div class="game-achievement-head"><div><div class="game-achievement-title">島嶼居民</div>'
+    +'<div class="game-achievement-sub">從起始基準後累積的財務行為，不會追溯初始建檔資料。</div></div>'
+    +'<div class="game-achievement-count">'+achievements.length+'</div></div>'
+    +'<div class="resident-list">'+cards+'</div>'
+    +'<div class="game-progress-grid">'
+    +'<div><span>新事件</span><b>'+progress.liveEvents+'</b></div>'
+    +'<div><span>淨值成長</span><b>'+fmtTWD(progress.familyGrowth)+'</b></div>'
+    +'<div><span>新類型</span><b>'+progress.addedAssetTypes+'</b></div>'
+    +'<div><span>紀錄天數</span><b>'+progress.recordDays+'</b></div>'
+    +'</div>';
+}
+
+function achievementIcon(id) {
+  if(id==='initial_archive_complete') return '🌱';
+  if(id==='first_live_event') return '✨';
+  if(id==='net_growth_10k') return '⛰️';
+  if(id==='asset_type_added_after_baseline') return '🧭';
+  if(id==='first_dividend_after_baseline') return '🍎';
+  if(id==='record_days_3') return '📘';
+  return '🏅';
+}
+
 // 合併同 ticker
 function groupAssets(all) {
   const map = {};
@@ -610,6 +724,7 @@ function groupAssets(all) {
 // 渲染首頁
 function renderAll() {
   renderGameSetupCard();
+  renderGameAchievementCard();
   const all = getAllFiltered();
   const totalAssets = all.reduce((s,a)=>s+assetValTWD(a),0);
   const debtTotal   = includeDebt ? totalDebtTWD() : 0;
