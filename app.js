@@ -1,5 +1,5 @@
 const API = '/api/quote';
-const APP_SCHEMA_VERSION = 3;
+const APP_SCHEMA_VERSION = 4;
 
 // 資產類別定義
 const CATS = {
@@ -26,6 +26,29 @@ const DEBT_TYPES = {
   personal:{label:'💳 信貸'}, student:{label:'🎓 學貸'},
   business:{label:'🏢 企業貸款'}, other:{label:'📋 其他'},
 };
+const ISLAND_ZONES = {
+  beach:{label:'起始海灘', nutrient:'memory'},
+  forest:{label:'記帳森林', nutrient:'record'},
+  hill:{label:'成長山丘', nutrient:'growth'},
+  harbor:{label:'配置港口', nutrient:'allocation'},
+  orchard:{label:'收成果園', nutrient:'harvest'},
+  spring:{label:'減壓溫泉', nutrient:'relief'},
+};
+const EGG_STATES = {
+  sleeping:{label:'沉睡中', icon:'🥚'},
+  glowing:{label:'微微發光', icon:'🌕'},
+  cracking:{label:'出現裂紋', icon:'🐣'},
+  hatched:{label:'未知生命甦醒', icon:'🌱'},
+};
+const NUTRIENT_TYPES = {
+  record:{label:'記錄養分', shortLabel:'記錄', zone:'forest', color:'#4f8f6f'},
+  memory:{label:'回顧養分', shortLabel:'回顧', zone:'beach', color:'#8b7bb8'},
+  growth:{label:'成長養分', shortLabel:'成長', zone:'hill', color:'#c28a39'},
+  allocation:{label:'配置養分', shortLabel:'配置', zone:'harbor', color:'#4d83b8'},
+  harvest:{label:'收成養分', shortLabel:'收成', zone:'orchard', color:'#c26b57'},
+  relief:{label:'減壓養分', shortLabel:'減壓', zone:'spring', color:'#5f9ca3'},
+};
+const FIRST_ISLAND_EGG_ID = 'first_island_egg';
 const CRYPTO_IDS = {
   BTC:'bitcoin',ETH:'ethereum',SOL:'solana',BNB:'binancecoin',
   XRP:'ripple',ADA:'cardano',DOGE:'dogecoin',AVAX:'avalanche-2',
@@ -77,15 +100,27 @@ function makeId(prefix) {
 }
 function createDefaultGameState() {
   return {
-    version: 1,
+    version: 2,
     onboarding: {status:'draft', startedAt:new Date().toISOString(), completedAt:null},
     baseline: null,
     achievements: [],
     historyEvents: [],
+    islandEgg: createDefaultIslandEgg(),
     monsterProfiles: {},
   };
 }
 let gameState = createDefaultGameState();
+
+function createDefaultIslandEgg() {
+  return {
+    id:FIRST_ISLAND_EGG_ID,
+    status:'sleeping',
+    obtainedAt:null,
+    hatchedAt:null,
+    lastStateChangeAt:null,
+    seenVersion:1,
+  };
+}
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 const PCT = v => (v>=0?'+':'')+v.toFixed(2)+'%';
@@ -138,6 +173,12 @@ function ensureDataSchema() {
   gameState.onboarding = {...createDefaultGameState().onboarding, ...(gameState.onboarding||{})};
   gameState.achievements = Array.isArray(gameState.achievements) ? gameState.achievements : [];
   gameState.historyEvents = Array.isArray(gameState.historyEvents) ? gameState.historyEvents : [];
+  gameState.islandEgg = {...createDefaultIslandEgg(), ...(gameState.islandEgg||{})};
+  if(gameState.onboarding.status==='complete' && !gameState.islandEgg.obtainedAt) {
+    gameState.islandEgg.obtainedAt = gameState.onboarding.completedAt || now;
+    gameState.islandEgg.lastStateChangeAt = gameState.islandEgg.obtainedAt;
+  }
+  gameState.version = Math.max(gameState.version||1, createDefaultGameState().version);
   gameState.monsterProfiles = gameState.monsterProfiles || {};
 }
 
@@ -200,7 +241,97 @@ function liveHistoryEvents() {
   return (gameState.historyEvents||[]).filter(e=>e.rewardEligible);
 }
 
+function monthKey(date) {
+  return /^\d{4}-\d{2}/.test(date||'') ? date.slice(0,7) : todayStr().slice(0,7);
+}
+
+function getIslandNutrients() {
+  const liveEvents = liveHistoryEvents();
+  const reviewedEvents = (gameState.historyEvents||[])
+    .filter(e=>e.source!=='initial_archive' && e.pendingAnimation===false);
+  const progress = getGameProgressBase();
+  const recordMonths = new Set(liveEvents.map(e=>monthKey(e.effectiveDate)));
+  const growthPoints = progress.familyGrowth >= 50000 ? 2 : progress.familyGrowth >= 10000 ? 1 : 0;
+  return {
+    record:{
+      points:Math.min(recordMonths.size, 3),
+      detail:recordMonths.size ? recordMonths.size+' 個月份有新紀錄' : '完成建檔後的新月份整理會累積',
+    },
+    memory:{
+      points:Math.min(reviewedEvents.length, 2),
+      detail:reviewedEvents.length ? '已收進 '+reviewedEvents.length+' 段島史片段' : '查看並收進島史片段後累積',
+    },
+    growth:{
+      points:growthPoints,
+      detail:progress.familyGrowth > 0 ? '淨值較基準成長 '+fmtTWD(progress.familyGrowth) : '淨值相對基準改善後累積',
+    },
+    allocation:{points:0, detail:'配置港口先保留，等主流程穩定後接入'},
+    harvest:{points:0, detail:'收成果園先保留，不作為第一版主線門檻'},
+    relief:{points:0, detail:'減壓溫泉先保留，只做正向鼓勵'},
+  };
+}
+
+function getIslandEggView() {
+  if(gameState.onboarding.status!=='complete' || !gameState.baseline) {
+    return {
+      status:'draft',
+      state:'sleeping',
+      totalPoints:0,
+      activeTypes:0,
+      nutrients:getEmptyNutrients(),
+      hint:'完成初始建檔後，第一顆島嶼蛋才會開始吸收新的財務養分。',
+    };
+  }
+  const nutrients = getIslandNutrients();
+  const activeTypes = Object.values(nutrients).filter(n=>n.points>0).length;
+  const totalPoints = Object.values(nutrients).reduce((sum,n)=>sum+n.points,0);
+  let state = 'sleeping';
+  if(activeTypes >= 3 && totalPoints >= 6) state = 'hatched';
+  else if(activeTypes >= 2 && totalPoints >= 3) state = 'cracking';
+  else if(totalPoints > 0) state = 'glowing';
+  return {
+    status:'complete',
+    state,
+    totalPoints,
+    activeTypes,
+    nutrients,
+    hint:getEggHint(state, nutrients),
+  };
+}
+
+function getEmptyNutrients() {
+  return Object.fromEntries(Object.keys(NUTRIENT_TYPES).map(key=>[key,{points:0, detail:NUTRIENT_TYPES[key].label+'尚未開始'}]));
+}
+
+function getEggHint(state, nutrients) {
+  if(state==='hatched') return '蛋殼打開了，裡面有一個還沒命名的島嶼生命正在觀察這段財務旅程。';
+  if(state==='cracking') return '蛋殼邊緣出現細細裂紋，幾種養分正在匯合。';
+  const top = Object.entries(nutrients).sort((a,b)=>b[1].points-a[1].points)[0];
+  if(top?.[0]==='record' && top[1].points>0) return '蛋殼裡傳來紙頁翻動的聲音，牠記得新的整理節奏。';
+  if(top?.[0]==='memory' && top[1].points>0) return '蛋殼像是收進了一點舊海風，島史片段正在沉澱。';
+  if(top?.[0]==='growth' && top[1].points>0) return '山丘那邊有一點暖光，蛋殼表面也跟著亮了一些。';
+  return '蛋還很安靜，等待完成建檔後的新紀錄、回顧或成長。';
+}
+
+function syncIslandEggState() {
+  if(gameState.onboarding.status!=='complete') return;
+  gameState.islandEgg = {...createDefaultIslandEgg(), ...(gameState.islandEgg||{})};
+  if(!gameState.islandEgg.obtainedAt) gameState.islandEgg.obtainedAt = gameState.onboarding.completedAt || new Date().toISOString();
+  const view = getIslandEggView();
+  if(gameState.islandEgg.status !== view.state) {
+    gameState.islandEgg.status = view.state;
+    gameState.islandEgg.lastStateChangeAt = new Date().toISOString();
+    if(view.state==='hatched' && !gameState.islandEgg.hatchedAt) gameState.islandEgg.hatchedAt = gameState.islandEgg.lastStateChangeAt;
+  }
+}
+
 function getGameProgress() {
+  const base = getGameProgressBase();
+  if(base.status==='draft') return base;
+  return {...base, egg:getIslandEggView()};
+}
+
+function getGameProgressBase() {
   if(gameState.onboarding.status!=='complete' || !gameState.baseline) {
     return {
       status:'draft',
@@ -275,6 +406,7 @@ function evaluateGameAchievements() {
 function saveData() {
   syncGameHistoryEvents();
   evaluateGameAchievements();
+  syncIslandEggState();
   localStorage.setItem('family_assets', JSON.stringify(assets));
   localStorage.setItem('family_names', JSON.stringify(names));
   localStorage.setItem('family_debts', JSON.stringify(debts));
@@ -304,6 +436,7 @@ function loadData() {
     if(gs) gameState = JSON.parse(gs);
     ensureDataSchema();
     syncGameHistoryEvents();
+    syncIslandEggState();
     if(Number(localStorage.getItem('family_schema_version')||0) < APP_SCHEMA_VERSION) saveData();
     if(n)  { names = JSON.parse(n); updateNameLabels(); }
     applyTheme(localStorage.getItem('theme') || 'arctic');
@@ -632,6 +765,11 @@ function completeInitialSetup() {
     wife:getScopeMetrics('wife'),
     family:getScopeMetrics('family'),
   };
+  gameState.islandEgg = {
+    ...createDefaultIslandEgg(),
+    obtainedAt:completedAt,
+    lastStateChangeAt:completedAt,
+  };
   gameState.historyEvents = gameState.historyEvents.map(e=>({
     ...e,
     source:'initial_archive',
@@ -729,32 +867,54 @@ function markGameHistorySeen() {
   renderAll();
 }
 
+function resetIslandGameForTesting() {
+  if(!confirm('這會重置島嶼測試資料，包含初始建檔狀態、島嶼蛋、養分、島史與生命跡象；不會刪除資產、負債、配息或交易資料。確定重置？')) return;
+  gameState = createDefaultGameState();
+  ensureDataSchema();
+  syncGameHistoryEvents();
+  saveData();
+  renderAll();
+  alert('島嶼測試資料已重置。財務資料都保留，可以重新跑初始建檔流程。');
+}
+
 function renderGameAchievementCard() {
   const el = document.getElementById('game-achievement-card');
   if(!el) return;
   const progress = getGameProgress();
-  const achievements = [...(progress.achievements||[])].sort((a,b)=>(b.unlockedAt||'').localeCompare(a.unlockedAt||''));
   if(progress.status!=='complete') {
-    el.innerHTML = '<div class="game-achievement-head"><div><div class="game-achievement-title">島嶼生命誌</div>'
-      +'<div class="game-achievement-sub">完成初始建檔後，新的紀錄才會開始留下生命跡象與里程碑。</div></div>'
-      +'<div class="game-achievement-count">0</div></div>';
+    el.innerHTML = '<div class="game-achievement-head"><div><div class="game-achievement-title">島嶼蛋</div>'
+      +'<div class="game-achievement-sub">完成初始建檔後，第一顆蛋才會開始吸收新的財務養分。</div></div>'
+      +'<div class="egg-badge">'+EGG_STATES.sleeping.icon+'</div></div>'
+      +'<div class="egg-footnote">測試期間可重跑島嶼流程，不會影響財務資料。</div>'
+      +'<button class="text-danger-link" onclick="resetIslandGameForTesting()">重置島嶼測試資料</button>';
     return;
   }
-  const recent = achievements.slice(0,3);
-  const cards = recent.length ? recent.map(a=>
-    '<div class="life-chip"><span class="life-icon">'+achievementIcon(a.id)+'</span>'
-    +'<span><b>'+escapeHtml(a.title)+'</b><small>'+((a.unlockedAt||'').slice(0,10)||'')+'</small></span></div>'
-  ).join('') : '<div class="game-empty-note">還沒有新的生命跡象。新增完成建檔後的紀錄，就會從這裡開始。</div>';
-  el.innerHTML = '<div class="game-achievement-head"><div><div class="game-achievement-title">島嶼生命誌</div>'
-    +'<div class="game-achievement-sub">從起始基準後累積的財務行為，不會追溯初始建檔資料。</div></div>'
-    +'<div class="game-achievement-count">'+achievements.length+'</div></div>'
-    +'<div class="life-list">'+cards+'</div>'
-    +'<div class="game-progress-grid">'
-    +'<div><span>新事件</span><b>'+progress.liveEvents+'</b></div>'
-    +'<div><span>淨值成長</span><b>'+fmtTWD(progress.familyGrowth)+'</b></div>'
-    +'<div><span>新類型</span><b>'+progress.addedAssetTypes+'</b></div>'
-    +'<div><span>紀錄天數</span><b>'+progress.recordDays+'</b></div>'
-    +'</div>';
+  const egg = progress.egg || getIslandEggView();
+  const eggState = EGG_STATES[egg.state] || EGG_STATES.sleeping;
+  el.innerHTML = '<div class="game-achievement-head"><div><div class="game-achievement-title">島嶼蛋</div>'
+    +'<div class="game-achievement-sub">'+escapeHtml(egg.hint)+'</div></div>'
+    +'<div class="egg-badge" title="'+escapeHtml(eggState.label)+'">'+eggState.icon+'</div></div>'
+    +'<div class="egg-summary-row">'
+    +'<div><span>狀態</span><b>'+escapeHtml(eggState.label)+'</b></div>'
+    +'<div><span>養分種類</span><b>'+egg.activeTypes+' / 3</b></div>'
+    +'<div><span>養分點數</span><b>'+egg.totalPoints+' / 6</b></div>'
+    +'</div>'
+    +'<div class="nutrient-list">'+renderNutrientRows(egg.nutrients)+'</div>'
+    +'<div class="egg-footnote">島嶼蛋只讀取完成建檔後的新紀錄；舊資料會留在島史，不會重播解鎖。</div>'
+    +'<button class="text-danger-link" onclick="resetIslandGameForTesting()">重置島嶼測試資料</button>';
+}
+
+function renderNutrientRows(nutrients) {
+  return ['record','memory','growth'].map(key => {
+    const type = NUTRIENT_TYPES[key];
+    const n = nutrients[key] || {points:0, detail:''};
+    const width = Math.min(100, Math.round(n.points / 3 * 100));
+    return '<div class="nutrient-row">'
+      +'<div class="nutrient-label"><span>'+escapeHtml(type.shortLabel)+'</span><small>'+escapeHtml(n.detail)+'</small></div>'
+      +'<div class="nutrient-meter"><i style="width:'+width+'%;background:'+type.color+'"></i></div>'
+      +'<b>'+n.points+'</b>'
+      +'</div>';
+  }).join('');
 }
 
 function achievementIcon(id) {

@@ -100,6 +100,22 @@ textarea{resize:vertical;min-height:52px}
 .game-achievement-title{font-size:14px;font-weight:700;color:var(--text)}
 .game-achievement-sub{font-size:11px;line-height:1.5;color:var(--text2);margin-top:3px}
 .game-achievement-count{min-width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg2);color:var(--accent);font-size:18px;font-weight:700;border:1px solid var(--border)}
+.egg-badge{min-width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg2);border:1px solid var(--border);font-size:22px}
+.egg-summary-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px}
+.egg-summary-row div{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px}
+.egg-summary-row span{display:block;font-size:10px;color:var(--text2);margin-bottom:2px}
+.egg-summary-row b{display:block;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nutrient-list{display:grid;gap:8px}
+.nutrient-row{display:grid;grid-template-columns:minmax(0,1fr) 92px 18px;gap:8px;align-items:center;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px}
+.nutrient-label{min-width:0}
+.nutrient-label span{display:block;font-size:12px;font-weight:700;color:var(--text)}
+.nutrient-label small{display:block;font-size:10px;line-height:1.35;color:var(--text2);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nutrient-meter{height:6px;border-radius:999px;background:var(--border);overflow:hidden}
+.nutrient-meter i{display:block;height:100%;border-radius:999px}
+.nutrient-row>b{font-size:12px;color:var(--text);text-align:right}
+.egg-footnote{font-size:10px;line-height:1.45;color:var(--text3);margin-top:10px}
+.text-danger-link{display:inline-flex;margin-top:8px;padding:0;border:0;background:none;color:var(--red);font-size:11px;line-height:1.4;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.text-danger-link:hover{opacity:.85}
 .life-list{display:grid;gap:8px}
 .life-chip{display:flex;align-items:center;gap:9px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px}
 .life-icon{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--card);font-size:16px;flex:0 0 28px}
@@ -250,3 +266,4 @@ tr:hover td{background:var(--bg2)}
   .frow3{grid-template-columns:1fr 1fr}
 }
 @media(max-width:520px){.game-setup-card{align-items:flex-start;flex-wrap:wrap}.game-setup-content{width:calc(100% - 54px)}.game-setup-action{width:100%;justify-content:center}}
+@media(max-width:520px){.egg-summary-row{grid-template-columns:1fr}.nutrient-row{grid-template-columns:1fr 70px 18px}.nutrient-label small{white-space:normal}}
