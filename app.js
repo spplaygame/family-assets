@@ -238,7 +238,7 @@ function evaluateGameAchievements() {
     {
       ok: progress.liveEvents >= 1,
       id:'first_live_event',
-      title:'第一位新居民報到',
+      title:'第一道新生命跡象',
       value:progress.liveEvents,
     },
     {
@@ -735,20 +735,20 @@ function renderGameAchievementCard() {
   const progress = getGameProgress();
   const achievements = [...(progress.achievements||[])].sort((a,b)=>(b.unlockedAt||'').localeCompare(a.unlockedAt||''));
   if(progress.status!=='complete') {
-    el.innerHTML = '<div class="game-achievement-head"><div><div class="game-achievement-title">島嶼居民</div>'
-      +'<div class="game-achievement-sub">完成初始建檔後，新的紀錄才會開始解鎖居民與里程碑。</div></div>'
+    el.innerHTML = '<div class="game-achievement-head"><div><div class="game-achievement-title">島嶼生命誌</div>'
+      +'<div class="game-achievement-sub">完成初始建檔後，新的紀錄才會開始留下生命跡象與里程碑。</div></div>'
       +'<div class="game-achievement-count">0</div></div>';
     return;
   }
   const recent = achievements.slice(0,3);
   const cards = recent.length ? recent.map(a=>
-    '<div class="resident-chip"><span class="resident-icon">'+achievementIcon(a.id)+'</span>'
-    +'<span><b>'+a.title+'</b><small>'+((a.unlockedAt||'').slice(0,10)||'')+'</small></span></div>'
-  ).join('') : '<div class="game-empty-note">還沒有新居民。新增完成建檔後的紀錄，就會從這裡開始。</div>';
-  el.innerHTML = '<div class="game-achievement-head"><div><div class="game-achievement-title">島嶼居民</div>'
+    '<div class="life-chip"><span class="life-icon">'+achievementIcon(a.id)+'</span>'
+    +'<span><b>'+escapeHtml(a.title)+'</b><small>'+((a.unlockedAt||'').slice(0,10)||'')+'</small></span></div>'
+  ).join('') : '<div class="game-empty-note">還沒有新的生命跡象。新增完成建檔後的紀錄，就會從這裡開始。</div>';
+  el.innerHTML = '<div class="game-achievement-head"><div><div class="game-achievement-title">島嶼生命誌</div>'
     +'<div class="game-achievement-sub">從起始基準後累積的財務行為，不會追溯初始建檔資料。</div></div>'
     +'<div class="game-achievement-count">'+achievements.length+'</div></div>'
-    +'<div class="resident-list">'+cards+'</div>'
+    +'<div class="life-list">'+cards+'</div>'
     +'<div class="game-progress-grid">'
     +'<div><span>新事件</span><b>'+progress.liveEvents+'</b></div>'
     +'<div><span>淨值成長</span><b>'+fmtTWD(progress.familyGrowth)+'</b></div>'
