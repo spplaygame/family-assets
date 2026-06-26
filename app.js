@@ -1,5 +1,6 @@
 const API = '/api/quote';
-const APP_SCHEMA_VERSION = 4;
+const APP_SCHEMA_VERSION = 5;
+const BASE_CURRENCY = 'TWD';
 
 // 資產類別定義
 const CATS = {
@@ -100,11 +101,12 @@ function makeId(prefix) {
 }
 function createDefaultGameState() {
   return {
-    version: 2,
+    version: 3,
     onboarding: {status:'draft', startedAt:new Date().toISOString(), completedAt:null},
     baseline: null,
     achievements: [],
     historyEvents: [],
+    chronicleEntries: [],
     islandEgg: createDefaultIslandEgg(),
     monsterProfiles: {},
   };
@@ -115,9 +117,15 @@ function createDefaultIslandEgg() {
   return {
     id:FIRST_ISLAND_EGG_ID,
     status:'sleeping',
+    eggType:null,
     obtainedAt:null,
     hatchedAt:null,
     lastStateChangeAt:null,
+    recordNutrientPoints:0,
+    reviewNutrientPoints:0,
+    growthNutrientPoints:0,
+    totalNutrientPoints:0,
+    hatchDirectionScore:{},
     seenVersion:1,
   };
 }
@@ -173,6 +181,7 @@ function ensureDataSchema() {
   gameState.onboarding = {...createDefaultGameState().onboarding, ...(gameState.onboarding||{})};
   gameState.achievements = Array.isArray(gameState.achievements) ? gameState.achievements : [];
   gameState.historyEvents = Array.isArray(gameState.historyEvents) ? gameState.historyEvents : [];
+  gameState.chronicleEntries = Array.isArray(gameState.chronicleEntries) ? gameState.chronicleEntries : [];
   gameState.islandEgg = {...createDefaultIslandEgg(), ...(gameState.islandEgg||{})};
   if(gameState.onboarding.status==='complete' && !gameState.islandEgg.obtainedAt) {
     gameState.islandEgg.obtainedAt = gameState.onboarding.completedAt || now;
@@ -180,6 +189,74 @@ function ensureDataSchema() {
   }
   gameState.version = Math.max(gameState.version||1, createDefaultGameState().version);
   gameState.monsterProfiles = gameState.monsterProfiles || {};
+  applyChroniclePhaseToRecords();
+  normalizeBaselineSchema();
+}
+
+function chroniclePhaseFromSource(source) {
+  if(source==='initial_archive') return 'prequel';
+  if(source==='backfill') return 'prequel_added_later';
+  return 'active_chronicle';
+}
+
+function sourceFromChroniclePhase(phase) {
+  if(phase==='prequel') return 'initial_archive';
+  if(phase==='prequel_added_later') return 'backfill';
+  return 'live';
+}
+
+function getChroniclePhaseForDate(date) {
+  if(gameState.onboarding.status!=='complete' || !gameState.onboarding.completedAt) return 'prequel';
+  const completedDate = gameState.onboarding.completedAt.slice(0,10);
+  return eventDate(date) <= completedDate ? 'prequel_added_later' : 'active_chronicle';
+}
+
+function applyChroniclePhaseToRecords() {
+  const apply = (items, dateGetter) => {
+    items.forEach(item => {
+      if(!item.chroniclePhase) item.chroniclePhase = getChroniclePhaseForDate(dateGetter(item));
+    });
+  };
+  apply(assets, a=>a.effectiveDate||a.buyDate);
+  apply(debts, d=>d.effectiveDate||d.startDate);
+  apply(dividends, d=>d.effectiveDate||d.date);
+  apply(transactions, t=>t.effectiveDate||t.date);
+}
+
+function markExistingRecordsAsPrequel() {
+  [...assets, ...debts, ...dividends, ...transactions].forEach(item => {
+    item.chroniclePhase = 'prequel';
+  });
+}
+
+function normalizeBaselineSchema() {
+  if(!gameState.baseline) return;
+  const completedAt = gameState.baseline.completedAt || gameState.baseline.capturedAt || gameState.onboarding.completedAt || new Date().toISOString();
+  const family = gameState.baseline.family || getScopeMetrics('family');
+  gameState.baseline = {
+    id:gameState.baseline.id || makeId('baseline'),
+    version:gameState.baseline.version || gameState.baseline.baselineVersion || 1,
+    status:gameState.baseline.status || 'completed',
+    completedAt,
+    capturedAt:gameState.baseline.capturedAt || completedAt,
+    baseCurrency:gameState.baseline.baseCurrency || BASE_CURRENCY,
+    fx:gameState.baseline.fx || {usd:fx.usd.rate,gbp:fx.gbp.rate},
+    totalAssets:gameState.baseline.totalAssets ?? family.totalAssets ?? 0,
+    totalLiabilities:gameState.baseline.totalLiabilities ?? family.totalDebt ?? 0,
+    netWorth:gameState.baseline.netWorth ?? family.netWorth ?? 0,
+    dataRangeStart:gameState.baseline.dataRangeStart || getFinancialEventDateRange().start,
+    dataRangeEnd:gameState.baseline.dataRangeEnd || getFinancialEventDateRange().end,
+    createdFrom:gameState.baseline.createdFrom || 'initial_setup',
+    isActive:gameState.baseline.isActive ?? true,
+    me:gameState.baseline.me || getScopeMetrics('me'),
+    wife:gameState.baseline.wife || getScopeMetrics('wife'),
+    family,
+    assetSnapshot:gameState.baseline.assetSnapshot || createAssetSnapshot(),
+    liabilitySnapshot:gameState.baseline.liabilitySnapshot || createLiabilitySnapshot(),
+    accountSnapshot:gameState.baseline.accountSnapshot || createAccountSnapshot(),
+    allocationSnapshot:gameState.baseline.allocationSnapshot || createAllocationSnapshot(),
+    adjustments:Array.isArray(gameState.baseline.adjustments) ? gameState.baseline.adjustments : [],
+  };
 }
 
 function collectFinancialEvents() {
@@ -188,22 +265,26 @@ function collectFinancialEvents() {
     id:'event_asset_'+a.id, entityId:a.id, kind:'asset_created',
     effectiveDate:eventDate(a.effectiveDate||a.buyDate), recordedAt:a.recordedAt,
     owner:a.owner||'me', assetType:a.type,
+    chroniclePhase:a.chroniclePhase||getChroniclePhaseForDate(a.effectiveDate||a.buyDate),
     label:a.name||a.ticker||a.address||a.note||CATS[a.type]?.label||'資產',
   }));
   debts.forEach(d => result.push({
     id:'event_debt_'+d.id, entityId:d.id, kind:'debt_started',
     effectiveDate:eventDate(d.startDate||d.effectiveDate), recordedAt:d.recordedAt,
     owner:d.owner||'me', debtType:d.debtType,
+    chroniclePhase:d.chroniclePhase||getChroniclePhaseForDate(d.startDate||d.effectiveDate),
     label:d.name||DEBT_TYPES[d.debtType]?.label||'負債',
   }));
   dividends.forEach(d => result.push({
     id:'event_dividend_'+d.id, entityId:d.id, kind:'dividend_received',
     effectiveDate:eventDate(d.effectiveDate||d.date), recordedAt:d.recordedAt,
+    chroniclePhase:d.chroniclePhase||getChroniclePhaseForDate(d.effectiveDate||d.date),
     owner:d.owner||null, label:d.sourceName||'配息', amount:d.amount||0, currency:d.currency||'TWD',
   }));
   transactions.forEach(t => result.push({
     id:'event_transaction_'+t.id, entityId:t.id, kind:t.action||'transaction',
     effectiveDate:eventDate(t.effectiveDate||t.date), recordedAt:t.recordedAt,
+    chroniclePhase:t.chroniclePhase||getChroniclePhaseForDate(t.effectiveDate||t.date),
     owner:t.owner||'me', label:t.name||t.ticker||'交易',
   }));
   return result.sort((a,b)=>a.effectiveDate.localeCompare(b.effectiveDate)||a.id.localeCompare(b.id));
@@ -214,13 +295,17 @@ function syncGameHistoryEvents() {
   const completedDate = gameState.onboarding.completedAt?.slice(0,10) || null;
   gameState.historyEvents = collectFinancialEvents().map(event => {
     const old = existing.get(event.id);
-    if(old) return {...old, ...event, source:old.source, rewardEligible:old.rewardEligible, pendingAnimation:old.pendingAnimation};
+    if(old) {
+      const source = old.source || sourceFromChroniclePhase(old.chroniclePhase || event.chroniclePhase);
+      return {...old, ...event, source, chroniclePhase:old.chroniclePhase||chroniclePhaseFromSource(source), rewardEligible:old.rewardEligible, pendingAnimation:old.pendingAnimation};
+    }
     const source = gameState.onboarding.status!=='complete'
       ? 'initial_archive'
-      : event.effectiveDate < completedDate ? 'backfill' : 'live';
+      : event.effectiveDate <= completedDate ? 'backfill' : 'live';
     return {
       ...event,
       source,
+      chroniclePhase:event.chroniclePhase || chroniclePhaseFromSource(source),
       rewardEligible:source==='live',
       pendingAnimation:source!=='initial_archive',
       addedToHistoryAt:new Date().toISOString(),
@@ -404,6 +489,7 @@ function evaluateGameAchievements() {
 
 // 儲存 / 載入
 function saveData() {
+  applyChroniclePhaseToRecords();
   syncGameHistoryEvents();
   evaluateGameAchievements();
   syncIslandEggState();
@@ -747,6 +833,115 @@ function getScopeMetrics(scope) {
   };
 }
 
+function getFinancialEventDateRange() {
+  const dates = collectFinancialEvents().map(e=>e.effectiveDate).filter(Boolean).sort();
+  return {start:dates[0]||null, end:dates[dates.length-1]||null};
+}
+
+function createAssetSnapshot() {
+  return assets.map(a => ({
+    assetId:a.id,
+    owner:a.owner||'me',
+    type:a.type,
+    label:a.name||a.ticker||a.note||CATS[a.type]?.label||'資產',
+    effectiveDate:eventDate(a.effectiveDate||a.buyDate),
+    valueTWD:Math.round(assetValTWD(a)),
+    costTWD:Math.round(assetCostTWD(a)),
+    chroniclePhase:a.chroniclePhase||'prequel',
+  }));
+}
+
+function createLiabilitySnapshot() {
+  return debts.map(d => ({
+    liabilityId:d.id,
+    owner:d.owner||'me',
+    type:d.debtType||'other',
+    label:d.name||DEBT_TYPES[d.debtType]?.label||'負債',
+    effectiveDate:eventDate(d.effectiveDate||d.startDate),
+    remainingTWD:Math.round(debtToTWD(d)),
+    currency:d.currency||'TWD',
+    chroniclePhase:d.chroniclePhase||'prequel',
+  }));
+}
+
+function createAccountSnapshot() {
+  return Object.entries(familyMembers).map(([accountId, included]) => ({
+    accountId,
+    displayName:names[accountId]||accountId,
+    included:included!==false,
+    metrics:getScopeMetrics(accountId),
+  }));
+}
+
+function createAllocationSnapshot() {
+  const familyAssets = assets.filter(a=>familyMembers[a.owner]!==false);
+  const total = familyAssets.reduce((sum,a)=>sum+assetValTWD(a),0);
+  return Object.entries(TYPE_GROUPS).map(([group, config]) => {
+    const value = familyAssets
+      .filter(a=>config.types.includes(a.type))
+      .reduce((sum,a)=>sum+assetValTWD(a),0);
+    return {
+      group,
+      valueTWD:Math.round(value),
+      ratio:total ? +(value/total).toFixed(4) : 0,
+      assetTypes:config.types,
+    };
+  }).filter(row=>row.valueTWD>0);
+}
+
+function createBaselineSnapshot(completedAt) {
+  const range = getFinancialEventDateRange();
+  const family = getScopeMetrics('family');
+  return {
+    id:makeId('baseline'),
+    version:1,
+    status:'completed',
+    completedAt,
+    capturedAt:completedAt,
+    baseCurrency:BASE_CURRENCY,
+    fx:{usd:fx.usd.rate,gbp:fx.gbp.rate},
+    totalAssets:family.totalAssets,
+    totalLiabilities:family.totalDebt,
+    netWorth:family.netWorth,
+    dataRangeStart:range.start,
+    dataRangeEnd:range.end,
+    createdFrom:'initial_setup',
+    isActive:true,
+    me:getScopeMetrics('me'),
+    wife:getScopeMetrics('wife'),
+    family,
+    assetSnapshot:createAssetSnapshot(),
+    liabilitySnapshot:createLiabilitySnapshot(),
+    accountSnapshot:createAccountSnapshot(),
+    allocationSnapshot:createAllocationSnapshot(),
+    adjustments:[],
+  };
+}
+
+function getBaselineStatus() {
+  if(gameState.onboarding.status==='complete' && gameState.baseline) {
+    return gameState.baseline.adjustments?.length ? 'adjusted' : 'completed';
+  }
+  if(!assets.length && !debts.length && !dividends.length && !transactions.length) return 'not_started';
+  if(assets.length || debts.length) return 'ready_to_complete';
+  return 'in_progress';
+}
+
+function createChronicleEntry({type, title, description, eventDate:entryDate, relatedAchievementId=null, relatedFinancialEventIds=[]}) {
+  return {
+    chronicleEntryId:makeId('chronicle'),
+    eventType:type,
+    title,
+    description,
+    relatedAchievementId,
+    relatedFinancialEventIds,
+    createdAt:new Date().toISOString(),
+    eventDate:eventDate(entryDate),
+    isFromInitialHistory:type==='prequel_fragment',
+    isUserConfirmed:false,
+  };
+}
+
 function completeInitialSetup() {
   if(gameState.onboarding.status==='complete') return;
   if(!assets.length && !debts.length) {
@@ -754,22 +949,25 @@ function completeInitialSetup() {
     return;
   }
   if(!confirm('完成後會以目前資料作為養成起點。未來仍可補登舊資料，且不會重複發放獎勵。確定完成建檔？')) return;
-  syncGameHistoryEvents();
   const completedAt = new Date().toISOString();
+  markExistingRecordsAsPrequel();
+  syncGameHistoryEvents();
   gameState.onboarding.status = 'complete';
   gameState.onboarding.completedAt = completedAt;
-  gameState.baseline = {
-    capturedAt:completedAt,
-    fx:{usd:fx.usd.rate,gbp:fx.gbp.rate},
-    me:getScopeMetrics('me'),
-    wife:getScopeMetrics('wife'),
-    family:getScopeMetrics('family'),
-  };
+  gameState.baseline = createBaselineSnapshot(completedAt);
   gameState.islandEgg = {
     ...createDefaultIslandEgg(),
     obtainedAt:completedAt,
     lastStateChangeAt:completedAt,
+    baselineId:gameState.baseline.id,
+    sourceBaselineVersion:gameState.baseline.version,
   };
+  gameState.chronicleEntries.push(createChronicleEntry({
+    type:'baseline_created',
+    title:'島嶼起點建立',
+    description:'你完成了初始建檔。島嶼從這一天開始有了清楚的起點，過去的資料成為島嶼前傳。',
+    eventDate:completedAt,
+  }));
   gameState.historyEvents = gameState.historyEvents.map(e=>({
     ...e,
     source:'initial_archive',
@@ -861,6 +1059,20 @@ function gameHistoryOverlayClick(e) {
 }
 
 function markGameHistorySeen() {
+  pendingGameHistoryEvents().forEach(e => {
+    if(e.chroniclePhase!=='prequel_added_later') return;
+    const exists = gameState.chronicleEntries.some(entry =>
+      (entry.relatedFinancialEventIds||[]).includes(e.id) && entry.eventType==='prequel_fragment'
+    );
+    if(exists) return;
+    gameState.chronicleEntries.push(createChronicleEntry({
+      type:'prequel_fragment',
+      title:'島史新增片段',
+      description:'一段較早的財務紀錄被收進島嶼前傳。',
+      eventDate:e.effectiveDate,
+      relatedFinancialEventIds:[e.id],
+    }));
+  });
   gameState.historyEvents = (gameState.historyEvents||[]).map(e=>e.pendingAnimation ? {...e, pendingAnimation:false} : e);
   saveData();
   closeGameHistoryModal();
