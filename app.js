@@ -1,5 +1,5 @@
 const API = '/api/quote';
-const APP_SCHEMA_VERSION = 6;
+const APP_SCHEMA_VERSION = 7;
 const BASE_CURRENCY = 'TWD';
 
 // 資產類別定義
@@ -68,6 +68,96 @@ const CHRONICLE_EVENT_TYPES = {
   DEBT_REDUCED:'debt_reduced',
   DEBT_FULLY_PAID:'debt_fully_paid',
   ISLAND_VISITED:'island_visited',
+};
+const ACHIEVEMENT_STATUS = {
+  LOCKED:'locked',
+  ELIGIBLE:'eligible',
+  PENDING_CONFIRMATION:'pending_confirmation',
+  HARVESTED:'harvested',
+  ARCHIVED:'archived',
+  IGNORED:'ignored',
+};
+const ACHIEVEMENT_DEFINITIONS = {
+  FIRST_ISLAND_LOG:{
+    achievementKeyBase:'record.first_island_log',
+    type:'record',
+    title:'第一份島務日誌',
+    description:'島嶼開始留下完成建檔後的第一筆新痕跡。',
+    harvestButtonLabel:'收進日誌',
+    nutrientType:'record',
+    nutrientPoints:1,
+    requiresConfirmation:false,
+  },
+  MONTH_TIDE:{
+    achievementKeyBase:'record.month_tide',
+    type:'record',
+    title:'新月份的潮聲',
+    description:'這個月份有了新的整理紀錄。島上的森林記住了這次回來。',
+    harvestButtonLabel:'讓蛋吸收',
+    nutrientType:'record',
+    nutrientPoints:1,
+    requiresConfirmation:false,
+  },
+  THREE_RETURNS:{
+    achievementKeyBase:'record.three_returns',
+    type:'record',
+    title:'三次回航',
+    description:'你在 3 個不同月份回來整理過島務。這不是每天催促，而是穩定回望。',
+    harvestButtonLabel:'收進航誌',
+    nutrientType:'record',
+    nutrientPoints:2,
+    requiresConfirmation:false,
+  },
+  QUARTER_PATROL:{
+    achievementKeyBase:'record.quarter_patrol',
+    type:'record',
+    title:'一季巡島',
+    description:'一季內至少有一次整理紀錄。島上的路徑開始變得清楚。',
+    harvestButtonLabel:'收進航誌',
+    nutrientType:'record',
+    nutrientPoints:2,
+    requiresConfirmation:false,
+  },
+  FIRST_CHRONICLE_PAGE:{
+    achievementKeyBase:'review.first_chronicle_page',
+    type:'review',
+    title:'第一頁島史',
+    description:'你完成了初始建檔。這座島開始知道自己從哪裡來。',
+    harvestButtonLabel:'收進島史',
+    nutrientType:'review',
+    nutrientPoints:1,
+    requiresConfirmation:false,
+  },
+  OLD_SEA_WIND:{
+    achievementKeyBase:'review.old_sea_wind',
+    type:'review',
+    title:'舊海風來信',
+    description:'你補上了一段較早的財務事件。它不會重播獎勵，但會成為島史的一部分。',
+    harvestButtonLabel:'收進前傳',
+    nutrientType:'review',
+    nutrientPoints:1,
+    requiresConfirmation:false,
+  },
+  PREQUEL_MARKER:{
+    achievementKeyBase:'review.prequel_marker',
+    type:'review',
+    title:'前傳標記',
+    description:'你確認了一段補登資料，讓它正式成為島嶼前傳的一頁。',
+    harvestButtonLabel:'標記完成',
+    nutrientType:'review',
+    nutrientPoints:1,
+    requiresConfirmation:false,
+  },
+  HILL_GLOW:{
+    achievementKeyBase:'growth.hill_glow',
+    type:'growth',
+    title:'山丘亮了一點',
+    description:'系統偵測到淨值相較初始基準出現改善。請確認這反映目前財務狀態的真實變化。',
+    harvestButtonLabel:'確認並收穫',
+    nutrientType:'growth',
+    nutrientPoints:1,
+    requiresConfirmation:true,
+  },
 };
 const CRYPTO_IDS = {
   BTC:'bitcoin',ETH:'ethereum',SOL:'solana',BNB:'binancecoin',
@@ -212,6 +302,7 @@ function ensureDataSchema() {
   gameState.monsterProfiles = gameState.monsterProfiles || {};
   applyChroniclePhaseToRecords();
   normalizeBaselineSchema();
+  normalizeAchievementSchema();
 }
 
 function chroniclePhaseFromSource(source) {
@@ -311,7 +402,8 @@ function collectFinancialEvents() {
   return result.sort((a,b)=>a.effectiveDate.localeCompare(b.effectiveDate)||a.id.localeCompare(b.id));
 }
 
-function createChronicleEventKey({type, sourceIds=[], occurredAt}) {
+function createChronicleEventKey({type, sourceIds=[], occurredAt, payload={}}) {
+  if(payload.eventKey) return payload.eventKey;
   return [type, eventDate(occurredAt), [...sourceIds].sort().join('|')].join('__');
 }
 
@@ -322,7 +414,7 @@ function dispatchChronicleEvent({type, occurredAt=todayStr(), sourceIds=[], payl
     occurredAt:eventDate(occurredAt),
     sourceIds:Array.isArray(sourceIds) ? sourceIds.filter(Boolean) : [],
   };
-  const eventKey = createChronicleEventKey(normalized);
+  const eventKey = createChronicleEventKey({...normalized, payload});
   const existing = (gameState.chronicleEvents||[]).find(e=>e.eventKey===eventKey);
   if(existing) return existing;
   const event = {
@@ -339,6 +431,45 @@ function dispatchChronicleEvent({type, occurredAt=todayStr(), sourceIds=[], payl
   return event;
 }
 
+function eventTypeForFinancialEvent(event) {
+  if(event.kind==='asset_created') return CHRONICLE_EVENT_TYPES.ASSET_CREATED;
+  if(event.kind==='debt_started') return CHRONICLE_EVENT_TYPES.LIABILITY_CREATED;
+  if(event.kind==='dividend_received') return CHRONICLE_EVENT_TYPES.DIVIDEND_RECORDED;
+  if(event.id?.startsWith('event_transaction_')) return CHRONICLE_EVENT_TYPES.TRANSACTION_RECORDED;
+  return null;
+}
+
+function dispatchFinancialChronicleEvent(event) {
+  const eventType = eventTypeForFinancialEvent(event);
+  if(!eventType) return;
+  dispatchChronicleEvent({
+    type:eventType,
+    occurredAt:event.effectiveDate,
+    sourceIds:[event.id],
+    payload:{
+      kind:event.kind,
+      entityId:event.entityId,
+      owner:event.owner,
+      label:event.label,
+      chroniclePhase:event.chroniclePhase,
+    },
+  });
+}
+
+function dispatchMonthReviewedEvent(event) {
+  const month = monthKey(event.effectiveDate);
+  dispatchChronicleEvent({
+    type:CHRONICLE_EVENT_TYPES.MONTH_REVIEWED,
+    occurredAt:month+'-01',
+    sourceIds:[],
+    payload:{
+      eventKey:'month_reviewed:'+month,
+      month,
+      sourceEventId:event.id,
+    },
+  });
+}
+
 function syncGameHistoryEvents() {
   const existing = new Map((gameState.historyEvents||[]).map(e=>[e.id,e]));
   const completedDate = gameState.onboarding.completedAt?.slice(0,10) || null;
@@ -346,7 +477,12 @@ function syncGameHistoryEvents() {
     const old = existing.get(event.id);
     if(old) {
       const source = old.source || sourceFromChroniclePhase(old.chroniclePhase || event.chroniclePhase);
-      return {...old, ...event, source, chroniclePhase:old.chroniclePhase||chroniclePhaseFromSource(source), rewardEligible:old.rewardEligible, pendingAnimation:old.pendingAnimation};
+      const eventWithPhase = {...old, ...event, source, chroniclePhase:old.chroniclePhase||chroniclePhaseFromSource(source)};
+      if(source==='live') {
+        dispatchFinancialChronicleEvent(eventWithPhase);
+        dispatchMonthReviewedEvent(eventWithPhase);
+      }
+      return {...eventWithPhase, rewardEligible:old.rewardEligible, pendingAnimation:old.pendingAnimation};
     }
     const source = gameState.onboarding.status!=='complete'
       ? 'initial_archive'
@@ -363,6 +499,10 @@ function syncGameHistoryEvents() {
           chroniclePhase:'prequel_added_later',
         },
       });
+    } else if(source==='live') {
+      const eventWithPhase = {...event, source, chroniclePhase:event.chroniclePhase || 'active_chronicle'};
+      dispatchFinancialChronicleEvent(eventWithPhase);
+      dispatchMonthReviewedEvent(eventWithPhase);
     }
     return {
       ...event,
@@ -378,10 +518,223 @@ function syncGameHistoryEvents() {
 function unlockAchievement({id, scope, title, metricValue=0, source='live'}) {
   if(!id || gameState.achievements.some(a=>a.id===id)) return false;
   gameState.achievements.push({
-    id, scope, title, metricValue, source,
+    id,
+    achievementKey:id,
+    scope,
+    title,
+    metricValue,
+    source,
+    status:ACHIEVEMENT_STATUS.ELIGIBLE,
     unlockedAt:new Date().toISOString(),
   });
   return true;
+}
+
+function achievementDefinitionByKeyBase(keyBase) {
+  return Object.values(ACHIEVEMENT_DEFINITIONS).find(def=>def.achievementKeyBase===keyBase) || null;
+}
+
+function legacyAchievementKey(id) {
+  const map = {
+    initial_archive_complete:'review.first_chronicle_page',
+    first_live_event:'record.first_island_log',
+    record_days_3:'record.three_returns',
+    net_growth_10k:'legacy.net_growth_10k',
+    asset_type_added_after_baseline:'legacy.asset_type_added_after_baseline',
+    first_dividend_after_baseline:'legacy.first_dividend_after_baseline',
+  };
+  return map[id] || ('legacy.'+id);
+}
+
+function normalizeAchievementSchema() {
+  gameState.achievements = (gameState.achievements||[]).map(a => {
+    const achievementKey = a.achievementKey || legacyAchievementKey(a.id);
+    const keyBase = achievementKey.replace(/\.\d{4}-\d{2}(-\d{2})?$/, '');
+    const def = achievementDefinitionByKeyBase(keyBase);
+    const status = a.status || (a.harvestedAt ? ACHIEVEMENT_STATUS.HARVESTED : ACHIEVEMENT_STATUS.ELIGIBLE);
+    const createdAt = a.createdAt || a.unlockedAt || a.achievedAt || new Date().toISOString();
+    return {
+      id:a.id || makeId('achievement'),
+      achievementKey,
+      type:a.type || def?.type || 'legacy',
+      status,
+      title:a.title || def?.title || '生命誌片段',
+      description:a.description || def?.description || '',
+      harvestButtonLabel:a.harvestButtonLabel || def?.harvestButtonLabel || '收進島嶼',
+      nutrientType:a.nutrientType || def?.nutrientType || null,
+      nutrientPoints:a.nutrientPoints ?? def?.nutrientPoints ?? 0,
+      achievedAt:a.achievedAt || a.unlockedAt || null,
+      harvestedAt:a.harvestedAt || null,
+      sourceEventIds:Array.isArray(a.sourceEventIds) ? a.sourceEventIds : [],
+      sourceSnapshot:a.sourceSnapshot || null,
+      requiresConfirmation:a.requiresConfirmation ?? def?.requiresConfirmation ?? false,
+      userConfirmed:a.userConfirmed || false,
+      metricValue:a.metricValue ?? 0,
+      scope:a.scope || 'family',
+      source:a.source || 'chronicle_event',
+      createdAt,
+      updatedAt:a.updatedAt || createdAt,
+      unlockedAt:a.unlockedAt || a.achievedAt || createdAt,
+    };
+  });
+}
+
+function upsertAchievementCandidate({definition, achievementKey, status, achievedAt, sourceEventIds=[], sourceSnapshot=null}) {
+  const existing = gameState.achievements.find(a=>a.achievementKey===achievementKey);
+  const now = new Date().toISOString();
+  if(existing) {
+    if(existing.status===ACHIEVEMENT_STATUS.HARVESTED) return existing;
+    if(!existing.status || existing.status===ACHIEVEMENT_STATUS.LOCKED) existing.status = status;
+    existing.sourceEventIds = Array.from(new Set([...(existing.sourceEventIds||[]), ...sourceEventIds]));
+    existing.sourceSnapshot = existing.sourceSnapshot || sourceSnapshot;
+    existing.updatedAt = now;
+    return existing;
+  }
+  const achievement = {
+    id:makeId('achievement'),
+    achievementKey,
+    type:definition.type,
+    status,
+    title:definition.title,
+    description:definition.description,
+    harvestButtonLabel:definition.harvestButtonLabel,
+    nutrientType:definition.nutrientType,
+    nutrientPoints:definition.nutrientPoints,
+    achievedAt:achievedAt || now,
+    harvestedAt:null,
+    sourceEventIds,
+    sourceSnapshot,
+    requiresConfirmation:definition.requiresConfirmation,
+    userConfirmed:false,
+    metricValue:0,
+    scope:'family',
+    source:'chronicle_event',
+    createdAt:now,
+    updatedAt:now,
+    unlockedAt:achievedAt || now,
+  };
+  gameState.achievements.push(achievement);
+  return achievement;
+}
+
+function eventsByType(type) {
+  return (gameState.chronicleEvents||[]).filter(e=>e.type===type);
+}
+
+function evaluateAchievementEngine() {
+  if(gameState.onboarding.status!=='complete' || !gameState.baseline) return;
+  normalizeAchievementSchema();
+  const activeTypes = [
+    CHRONICLE_EVENT_TYPES.ASSET_CREATED,
+    CHRONICLE_EVENT_TYPES.LIABILITY_CREATED,
+    CHRONICLE_EVENT_TYPES.TRANSACTION_RECORDED,
+    CHRONICLE_EVENT_TYPES.DIVIDEND_RECORDED,
+  ];
+  const activeEvents = (gameState.chronicleEvents||[])
+    .filter(e=>activeTypes.includes(e.type))
+    .sort((a,b)=>a.occurredAt.localeCompare(b.occurredAt)||a.id.localeCompare(b.id));
+  if(activeEvents.length) {
+    upsertAchievementCandidate({
+      definition:ACHIEVEMENT_DEFINITIONS.FIRST_ISLAND_LOG,
+      achievementKey:ACHIEVEMENT_DEFINITIONS.FIRST_ISLAND_LOG.achievementKeyBase,
+      status:ACHIEVEMENT_STATUS.ELIGIBLE,
+      achievedAt:activeEvents[0].occurredAt,
+      sourceEventIds:[activeEvents[0].id],
+      sourceSnapshot:{eventType:activeEvents[0].type},
+    });
+  }
+
+  const monthEvents = eventsByType(CHRONICLE_EVENT_TYPES.MONTH_REVIEWED)
+    .sort((a,b)=>a.occurredAt.localeCompare(b.occurredAt)||a.id.localeCompare(b.id));
+  monthEvents.forEach(e => {
+    const month = e.payload?.month || monthKey(e.occurredAt);
+    upsertAchievementCandidate({
+      definition:ACHIEVEMENT_DEFINITIONS.MONTH_TIDE,
+      achievementKey:ACHIEVEMENT_DEFINITIONS.MONTH_TIDE.achievementKeyBase+'.'+month,
+      status:ACHIEVEMENT_STATUS.ELIGIBLE,
+      achievedAt:e.occurredAt,
+      sourceEventIds:[e.id],
+      sourceSnapshot:{month},
+    });
+  });
+  const uniqueMonths = [...new Set(monthEvents.map(e=>e.payload?.month || monthKey(e.occurredAt)))];
+  if(uniqueMonths.length >= 3) {
+    upsertAchievementCandidate({
+      definition:ACHIEVEMENT_DEFINITIONS.THREE_RETURNS,
+      achievementKey:ACHIEVEMENT_DEFINITIONS.THREE_RETURNS.achievementKeyBase,
+      status:ACHIEVEMENT_STATUS.ELIGIBLE,
+      achievedAt:monthEvents[2]?.occurredAt,
+      sourceEventIds:monthEvents.slice(0,3).map(e=>e.id),
+      sourceSnapshot:{months:uniqueMonths.slice(0,3)},
+    });
+  }
+
+  const quarterEvents = eventsByType(CHRONICLE_EVENT_TYPES.QUARTER_REVIEWED);
+  quarterEvents.forEach(e => {
+    const quarter = e.payload?.quarter || e.occurredAt.slice(0,7);
+    upsertAchievementCandidate({
+      definition:ACHIEVEMENT_DEFINITIONS.QUARTER_PATROL,
+      achievementKey:ACHIEVEMENT_DEFINITIONS.QUARTER_PATROL.achievementKeyBase+'.'+quarter,
+      status:ACHIEVEMENT_STATUS.ELIGIBLE,
+      achievedAt:e.occurredAt,
+      sourceEventIds:[e.id],
+      sourceSnapshot:{quarter},
+    });
+  });
+
+  const baselineEvents = eventsByType(CHRONICLE_EVENT_TYPES.BASELINE_COMPLETED);
+  if(baselineEvents.length) {
+    upsertAchievementCandidate({
+      definition:ACHIEVEMENT_DEFINITIONS.FIRST_CHRONICLE_PAGE,
+      achievementKey:ACHIEVEMENT_DEFINITIONS.FIRST_CHRONICLE_PAGE.achievementKeyBase,
+      status:ACHIEVEMENT_STATUS.ELIGIBLE,
+      achievedAt:baselineEvents[0].occurredAt,
+      sourceEventIds:[baselineEvents[0].id],
+      sourceSnapshot:{baselineId:baselineEvents[0].payload?.baselineId},
+    });
+  }
+
+  const importedEvents = eventsByType(CHRONICLE_EVENT_TYPES.OLD_HISTORY_IMPORTED);
+  const importedByDay = new Map();
+  importedEvents.forEach(e => {
+    const day = eventDate(e.occurredAt);
+    if(!importedByDay.has(day)) importedByDay.set(day, []);
+    importedByDay.get(day).push(e);
+  });
+  importedByDay.forEach((events, day) => {
+    upsertAchievementCandidate({
+      definition:ACHIEVEMENT_DEFINITIONS.OLD_SEA_WIND,
+      achievementKey:ACHIEVEMENT_DEFINITIONS.OLD_SEA_WIND.achievementKeyBase+'.'+day,
+      status:ACHIEVEMENT_STATUS.ELIGIBLE,
+      achievedAt:day,
+      sourceEventIds:events.map(e=>e.id),
+      sourceSnapshot:{date:day, count:events.length},
+    });
+  });
+
+  eventsByType(CHRONICLE_EVENT_TYPES.OLD_HISTORY_CONFIRMED).forEach(e => {
+    upsertAchievementCandidate({
+      definition:ACHIEVEMENT_DEFINITIONS.PREQUEL_MARKER,
+      achievementKey:ACHIEVEMENT_DEFINITIONS.PREQUEL_MARKER.achievementKeyBase+'.'+e.id,
+      status:ACHIEVEMENT_STATUS.ELIGIBLE,
+      achievedAt:e.occurredAt,
+      sourceEventIds:[e.id],
+      sourceSnapshot:{chronicleEntryId:e.payload?.chronicleEntryId},
+    });
+  });
+
+  eventsByType(CHRONICLE_EVENT_TYPES.NET_WORTH_IMPROVED)
+    .filter(e=>(e.payload?.improvementPercent||0) >= 1)
+    .forEach(e => {
+      upsertAchievementCandidate({
+        definition:ACHIEVEMENT_DEFINITIONS.HILL_GLOW,
+        achievementKey:ACHIEVEMENT_DEFINITIONS.HILL_GLOW.achievementKeyBase+'.baseline_v'+(gameState.baseline?.version||1),
+        status:ACHIEVEMENT_STATUS.PENDING_CONFIRMATION,
+        achievedAt:e.occurredAt,
+        sourceEventIds:[e.id],
+        sourceSnapshot:e.payload,
+      });
+    });
 }
 
 function liveHistoryEvents() {
@@ -510,43 +863,7 @@ function getGameProgressBase() {
 }
 
 function evaluateGameAchievements() {
-  if(gameState.onboarding.status!=='complete' || !gameState.baseline) return;
-  const progress = getGameProgress();
-  const checks = [
-    {
-      ok: progress.liveEvents >= 1,
-      id:'first_live_event',
-      title:'第一道新生命跡象',
-      value:progress.liveEvents,
-    },
-    {
-      ok: progress.familyGrowth >= 10000,
-      id:'net_growth_10k',
-      title:'島嶼長出第一片新地',
-      value:progress.familyGrowth,
-    },
-    {
-      ok: progress.addedAssetTypes >= 1,
-      id:'asset_type_added_after_baseline',
-      title:'探索新的資產棲地',
-      value:progress.addedAssetTypes,
-    },
-    {
-      ok: progress.dividendEvents >= 1,
-      id:'first_dividend_after_baseline',
-      title:'第一顆果實成熟',
-      value:progress.dividendEvents,
-    },
-    {
-      ok: progress.recordDays >= 3,
-      id:'record_days_3',
-      title:'三天島務日誌',
-      value:progress.recordDays,
-    },
-  ];
-  checks.forEach(c => {
-    if(c.ok) unlockAchievement({id:c.id, scope:'family', title:c.title, metricValue:c.value, source:'live'});
-  });
+  evaluateAchievementEngine();
 }
 
 // 儲存 / 載入
