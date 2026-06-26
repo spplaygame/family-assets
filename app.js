@@ -1,5 +1,5 @@
 const API = '/api/quote';
-const APP_SCHEMA_VERSION = 5;
+const APP_SCHEMA_VERSION = 6;
 const BASE_CURRENCY = 'TWD';
 
 // 資產類別定義
@@ -50,6 +50,25 @@ const NUTRIENT_TYPES = {
   relief:{label:'減壓養分', shortLabel:'減壓', zone:'spring', color:'#5f9ca3'},
 };
 const FIRST_ISLAND_EGG_ID = 'first_island_egg';
+const CHRONICLE_EVENT_TYPES = {
+  BASELINE_COMPLETED:'baseline_completed',
+  ASSET_CREATED:'asset_created',
+  ASSET_UPDATED:'asset_updated',
+  ASSET_DELETED:'asset_deleted',
+  LIABILITY_CREATED:'liability_created',
+  TRANSACTION_RECORDED:'transaction_recorded',
+  DIVIDEND_RECORDED:'dividend_recorded',
+  OLD_HISTORY_IMPORTED:'old_history_imported',
+  OLD_HISTORY_CONFIRMED:'old_history_confirmed',
+  MONTH_REVIEWED:'month_reviewed',
+  QUARTER_REVIEWED:'quarter_reviewed',
+  ALLOCATION_REVIEWED:'allocation_reviewed',
+  NET_WORTH_IMPROVED:'net_worth_improved',
+  DEBT_MANAGED:'debt_managed',
+  DEBT_REDUCED:'debt_reduced',
+  DEBT_FULLY_PAID:'debt_fully_paid',
+  ISLAND_VISITED:'island_visited',
+};
 const CRYPTO_IDS = {
   BTC:'bitcoin',ETH:'ethereum',SOL:'solana',BNB:'binancecoin',
   XRP:'ripple',ADA:'cardano',DOGE:'dogecoin',AVAX:'avalanche-2',
@@ -106,6 +125,7 @@ function createDefaultGameState() {
     baseline: null,
     achievements: [],
     historyEvents: [],
+    chronicleEvents: [],
     chronicleEntries: [],
     islandEgg: createDefaultIslandEgg(),
     monsterProfiles: {},
@@ -181,6 +201,7 @@ function ensureDataSchema() {
   gameState.onboarding = {...createDefaultGameState().onboarding, ...(gameState.onboarding||{})};
   gameState.achievements = Array.isArray(gameState.achievements) ? gameState.achievements : [];
   gameState.historyEvents = Array.isArray(gameState.historyEvents) ? gameState.historyEvents : [];
+  gameState.chronicleEvents = Array.isArray(gameState.chronicleEvents) ? gameState.chronicleEvents : [];
   gameState.chronicleEntries = Array.isArray(gameState.chronicleEntries) ? gameState.chronicleEntries : [];
   gameState.islandEgg = {...createDefaultIslandEgg(), ...(gameState.islandEgg||{})};
   if(gameState.onboarding.status==='complete' && !gameState.islandEgg.obtainedAt) {
@@ -290,6 +311,34 @@ function collectFinancialEvents() {
   return result.sort((a,b)=>a.effectiveDate.localeCompare(b.effectiveDate)||a.id.localeCompare(b.id));
 }
 
+function createChronicleEventKey({type, sourceIds=[], occurredAt}) {
+  return [type, eventDate(occurredAt), [...sourceIds].sort().join('|')].join('__');
+}
+
+function dispatchChronicleEvent({type, occurredAt=todayStr(), sourceIds=[], payload={}, processed=false}) {
+  if(!type) return null;
+  const normalized = {
+    type,
+    occurredAt:eventDate(occurredAt),
+    sourceIds:Array.isArray(sourceIds) ? sourceIds.filter(Boolean) : [],
+  };
+  const eventKey = createChronicleEventKey(normalized);
+  const existing = (gameState.chronicleEvents||[]).find(e=>e.eventKey===eventKey);
+  if(existing) return existing;
+  const event = {
+    id:makeId('chronicle_event'),
+    eventKey,
+    type:normalized.type,
+    occurredAt:normalized.occurredAt,
+    createdAt:new Date().toISOString(),
+    sourceIds:normalized.sourceIds,
+    payload,
+    processed,
+  };
+  gameState.chronicleEvents.push(event);
+  return event;
+}
+
 function syncGameHistoryEvents() {
   const existing = new Map((gameState.historyEvents||[]).map(e=>[e.id,e]));
   const completedDate = gameState.onboarding.completedAt?.slice(0,10) || null;
@@ -302,6 +351,19 @@ function syncGameHistoryEvents() {
     const source = gameState.onboarding.status!=='complete'
       ? 'initial_archive'
       : event.effectiveDate <= completedDate ? 'backfill' : 'live';
+    if(source==='backfill') {
+      dispatchChronicleEvent({
+        type:CHRONICLE_EVENT_TYPES.OLD_HISTORY_IMPORTED,
+        occurredAt:event.effectiveDate,
+        sourceIds:[event.id],
+        payload:{
+          kind:event.kind,
+          entityId:event.entityId,
+          label:event.label,
+          chroniclePhase:'prequel_added_later',
+        },
+      });
+    }
     return {
       ...event,
       source,
@@ -968,6 +1030,20 @@ function completeInitialSetup() {
     description:'你完成了初始建檔。島嶼從這一天開始有了清楚的起點，過去的資料成為島嶼前傳。',
     eventDate:completedAt,
   }));
+  dispatchChronicleEvent({
+    type:CHRONICLE_EVENT_TYPES.BASELINE_COMPLETED,
+    occurredAt:completedAt,
+    sourceIds:[gameState.baseline.id],
+    payload:{
+      baselineId:gameState.baseline.id,
+      baselineVersion:gameState.baseline.version,
+      netWorth:gameState.baseline.netWorth,
+      totalAssets:gameState.baseline.totalAssets,
+      totalLiabilities:gameState.baseline.totalLiabilities,
+      dataRangeStart:gameState.baseline.dataRangeStart,
+      dataRangeEnd:gameState.baseline.dataRangeEnd,
+    },
+  });
   gameState.historyEvents = gameState.historyEvents.map(e=>({
     ...e,
     source:'initial_archive',
@@ -1061,17 +1137,31 @@ function gameHistoryOverlayClick(e) {
 function markGameHistorySeen() {
   pendingGameHistoryEvents().forEach(e => {
     if(e.chroniclePhase!=='prequel_added_later') return;
-    const exists = gameState.chronicleEntries.some(entry =>
+    let entry = gameState.chronicleEntries.find(entry =>
       (entry.relatedFinancialEventIds||[]).includes(e.id) && entry.eventType==='prequel_fragment'
     );
-    if(exists) return;
-    gameState.chronicleEntries.push(createChronicleEntry({
-      type:'prequel_fragment',
-      title:'島史新增片段',
-      description:'一段較早的財務紀錄被收進島嶼前傳。',
-      eventDate:e.effectiveDate,
-      relatedFinancialEventIds:[e.id],
-    }));
+    if(!entry) {
+      entry = createChronicleEntry({
+        type:'prequel_fragment',
+        title:'島史新增片段',
+        description:'一段較早的財務紀錄被收進島嶼前傳。',
+        eventDate:e.effectiveDate,
+        relatedFinancialEventIds:[e.id],
+      });
+      gameState.chronicleEntries.push(entry);
+    }
+    dispatchChronicleEvent({
+      type:CHRONICLE_EVENT_TYPES.OLD_HISTORY_CONFIRMED,
+      occurredAt:e.effectiveDate,
+      sourceIds:[e.id],
+      payload:{
+        chronicleEntryId:entry.chronicleEntryId,
+        kind:e.kind,
+        entityId:e.entityId,
+        label:e.label,
+      },
+      processed:false,
+    });
   });
   gameState.historyEvents = (gameState.historyEvents||[]).map(e=>e.pendingAnimation ? {...e, pendingAnimation:false} : e);
   saveData();
@@ -1082,6 +1172,9 @@ function markGameHistorySeen() {
 function resetIslandGameForTesting() {
   if(!confirm('這會重置島嶼測試資料，包含初始建檔狀態、島嶼蛋、養分、島史與生命跡象；不會刪除資產、負債、配息或交易資料。確定重置？')) return;
   gameState = createDefaultGameState();
+  [...assets, ...debts, ...dividends, ...transactions].forEach(item => {
+    delete item.chroniclePhase;
+  });
   ensureDataSchema();
   syncGameHistoryEvents();
   saveData();
